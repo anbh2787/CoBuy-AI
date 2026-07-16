@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
-    const { frameBase64, audioBase64, questionText, touchTarget, currentUserName } = await req.json();
+    const { frameBase64, audioBase64, questionText, touchTarget, remotePeerName, currentUserName } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!frameBase64 || frameBase64.length < 2000 || frameBase64 === 'data:,') {
@@ -46,7 +46,9 @@ export async function POST(req: Request) {
           : `User asks verbally: "${questionText || "Describe the item in view out loud."}"`;
 
         if (touchTarget && typeof touchTarget.x === 'number' && typeof touchTarget.y === 'number') {
-          instructionContext = `PRECISION TOUCH TARGETING: The user touched the screen at exact coordinate coordinates [X: ${touchTarget.x}%, Y: ${touchTarget.y}%]. Inspect what specific object or product sits right directly beneath that target circle on the photograph. Ignore background objects across other areas of the picture completely.`;
+          instructionContext = remotePeerName
+            ? `REMOTE PEER CAMERA TOUCH: Requester (${currentUserName || 'Participant'}) touched an object displayed inside ${remotePeerName}'s remote live camera screen precisely across normalized coordinate location [X: ${touchTarget.x}%, Y: ${touchTarget.y}%]. Identify what specific physical object or product sits beneath that target circle inside ${remotePeerName}'s picture along with typical retail pricing across major stores.`
+            : `PRECISION TOUCH TARGETING: The user touched their live camera screen precisely at coordinate coordinates [X: ${touchTarget.x}%, Y: ${touchTarget.y}%]. Inspect what specific object sits beneath that crosshair target on the photograph. Ignore background objects across other areas of the picture completely.`;
         }
 
         const prompt = `
@@ -55,25 +57,24 @@ Analyze the literal physical pixels across the provided photo right above.
 ${instructionContext}
 
 Strict conversational rules for spoken voice delivery:
-1. FIRST listen directly to and answer what the user is asking out loud or what object lies beneath the tapped coordinates! If evaluating a touch target, state what specific item sits beneath the ring right along with its typical retail pricing out loud across speakers.
+1. FIRST answer directly out loud what object lies beneath the tapped coordinates! If evaluating a touch target, state clearly right right across speakers what specific item sits right beneath the ring along with typical estimated retail price.
 2. ZERO-BIAS FACTUAL GROUNDING: Base all evaluation strictly on physical items visible inside this picture.
 3. EXTREME BREVITY RULE: Keep your spoken answer short, punchy, and concise—exactly 1 short conversational sentence (under 20 words max). Never read long lists or paragraphs out loud.
 4. If this is a touch identification, structure your output precisely with a concise label tag formatted as [LABEL: Short Item Name (~$Price)] at the very beginning of your sentence so our UI can pin the target badge directly over the coordinate crosshairs!
-   - Example format: "[LABEL: Chatham Armchair (~$310)] That decorative white armchair right where you tapped goes around $310 at retail."
-5. Do not include raw markdown asterisks across your response text.
+   - Example format: "[LABEL: Chatham Armchair (~$310)] That decorative white armchair where you tapped goes around $310 at retail."
+5. Do not include raw markdown asterisks inside your response text.
 `;
         parts.push(prompt);
 
         const result = await model.generateContent(parts);
         const responseText = result.response.text();
 
-        // Extract target label if present inside response text (`[LABEL: ...]`)
         const labelMatch = responseText.match(/\[LABEL:\s*([^\]]+)\]/i);
         const targetLabel = labelMatch ? labelMatch[1].trim() : undefined;
         const cleanSpoken = responseText.replace(/\[LABEL:\s*[^\]]+\]/i, '').replace(/[*#_`~]/g, '').trim();
 
         return NextResponse.json({
-          spokenReply: cleanSpoken || `I identified the item beneath your finger touch directly across our studio room right now!`,
+          spokenReply: cleanSpoken || `I verified the targeted visual item directly across our studio right now!`,
           telemetry: {
             status: 'VALID_PIXELS_INSPECTED',
             byteLength: matches ? matches[1].length : frameBase64.length,
@@ -92,7 +93,7 @@ Strict conversational rules for spoken voice delivery:
     }
 
     return NextResponse.json({
-      spokenReply: `Hey ${currentUserName || 'Anuj'}, I verified your targeted touch capture directly across our studio!`,
+      spokenReply: `Hey ${currentUserName || 'Anuj'}, I verified your targeted touch capture right inside our studio!`,
       telemetry: { status: 'NO_API_KEY_FALLBACK', targetLabel: touchTarget ? 'Targeted Item (~$150)' : undefined }
     }, { status: 200 });
   } catch (error: any) {

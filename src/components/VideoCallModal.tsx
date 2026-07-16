@@ -30,6 +30,7 @@ interface TouchTargetState {
   y: number;
   label?: string;
   isLoading?: boolean;
+  authorName?: string;
 }
 
 interface RcaLogEntry {
@@ -46,14 +47,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; peerName: string; stream: MediaStream }>>([]);
-  const [telemetryStatus, setTelemetryStatus] = useState<string>('Tap video item to target • Tap ✨ to speak • Tap 🌐 for AR');
+  const [telemetryStatus, setTelemetryStatus] = useState<string>('Tap ANY video item to target • Tap ✨ to speak • Tap 🌐 for AR');
 
   // STEP 1: LIVE AR TRANSLATION LAYER STATE & TARGETED PEER MAP
   const [isTranslateArActive, setIsTranslateArActive] = useState(false);
   const [arTranslations, setArTranslations] = useState<ARTranslationItem[]>([]);
   const [remoteArMap, setRemoteArMap] = useState<Record<string, ARTranslationItem[]>>({});
 
-  // STEP 2: TOUCH TARGET BOUNDING STATE & TARGETED PEER MAP
+  // STEP 2 & 3: LOCAL + REMOTE TOUCH TARGET BOUNDING STATE
   const [activeTouchTarget, setActiveTouchTarget] = useState<TouchTargetState | null>(null);
   const [remoteTouchMap, setRemoteTouchMap] = useState<Record<string, TouchTargetState | null>>({});
 
@@ -87,13 +88,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       lastCapturedImageRef.current = undefined;
       setArTranslations([]);
       setActiveTouchTarget(null);
+      setRemoteTouchMap({});
       setRcaLogs([]);
 
       const initStudioSequence = async () => {
-        logRcaInstrument('INIT_START', `User ${currentUser.name} (${currentUser.id}) launched studio right inside room ${groupId}. Acquiring camera tracks strictly before joining websocket signaling...`);
+        logRcaInstrument('INIT_START', `User ${currentUser.name} (${currentUser.id}) opened studio inside room ${groupId}. Acquiring camera tracks strictly prior to channel signaling...`);
         const cameraReady = await startLocalWebcam('user');
         if (!isMounted) return;
-        logRcaInstrument('INIT_CAMERA', cameraReady ? 'Local hardware webcam tracks successfully loaded and ready for peers' : 'Warning: Local hardware device returned zero stream tracks');
+        logRcaInstrument('INIT_CAMERA', cameraReady ? 'Local hardware webcam tracks loaded right successfully' : 'Warning: Local hardware device returned zero stream tracks');
         setupWebRTCSignaling();
       };
 
@@ -159,7 +161,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } else {
       if (arSamplerIntervalRef.current) clearInterval(arSamplerIntervalRef.current);
       if (!isTranslateArActive && isOpen) {
-        setTelemetryStatus('Tap video item to target • Tap ✨ to speak • Tap 🌐 for AR');
+        setTelemetryStatus('Tap ANY video item to target • Tap ✨ to speak • Tap 🌐 for AR');
         setArTranslations([]);
         if (channelRef.current && currentUser) {
           channelRef.current.send({
@@ -260,7 +262,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
         if (payload.targetId !== currentUser.id) return;
-        logRcaInstrument('WEBRTC_OFFER', `Received remote SDP offer from ${payload.senderName}. Generating SDP answer with attached video tracks...`);
+        logRcaInstrument('WEBRTC_OFFER', `Received remote SDP offer directly from ${payload.senderName}. Generating SDP answer right right now...`);
         const stalePc = peerConnectionsRef.current.get(payload.senderId);
         if (stalePc && stalePc.signalingState !== 'stable') {
           stalePc.close();
@@ -279,7 +281,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .on('broadcast', { event: 'webrtc-answer' }, async ({ payload }) => {
         if (payload.targetId !== currentUser.id) return;
-        logRcaInstrument('WEBRTC_ANSWER', `Received remote SDP answer ACK from ${payload.senderId}. Setting remote description...`);
+        logRcaInstrument('WEBRTC_ANSWER', `Received remote SDP answer ACK right from ${payload.senderId}. Setting remote description right now...`);
         const pc = peerConnectionsRef.current.get(payload.senderId);
         if (pc) {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
@@ -296,7 +298,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .on('broadcast', { event: 'peer-leave' }, async ({ payload }) => {
         if (payload.userId === currentUser.id) return;
-        logRcaInstrument('PEER_LEAVE', `User ${payload.userName || payload.userId} dropped/left call. Cleaning remote stream tile...`);
+        logRcaInstrument('PEER_LEAVE', `User ${payload.userName || payload.userId} left call. Cleaning remote stream tile right now...`);
         const pc = peerConnectionsRef.current.get(payload.userId);
         if (pc) {
           pc.close();
@@ -311,19 +313,23 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .on('broadcast', { event: 'touch-target-sync' }, ({ payload }) => {
         if (payload.peerId) {
-          setRemoteTouchMap(prev => ({ ...prev, [payload.peerId]: payload.target }));
+          if (payload.peerId === currentUser.id) {
+            setActiveTouchTarget(payload.target || null);
+          } else {
+            setRemoteTouchMap(prev => ({ ...prev, [payload.peerId]: payload.target }));
+          }
         }
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED' && currentUser) {
-          logRcaInstrument('CHANNEL_SUCCEEDED', `Signaling subscribed across webrtc_call_${groupId}. Announcing presence via peer-join...`);
+          logRcaInstrument('CHANNEL_SUCCEEDED', `Signaling subscribed right inside room webrtc_call_${groupId}. Announcing presence right via peer-join...`);
           channel.send({
             type: 'broadcast',
             event: 'peer-join',
             payload: { userId: currentUser.id, userName: currentUser.name }
           });
         } else {
-          logRcaInstrument('CHANNEL_STATUS', `Supabase status check: ${status}`);
+          logRcaInstrument('CHANNEL_STATUS', `Supabase status right now: ${status}`);
         }
       });
 
@@ -341,9 +347,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     peerConnectionsRef.current.set(remoteUserId, pc);
 
     pc.onconnectionstatechange = () => {
-      logRcaInstrument('CONN_STATE', `Link with ${remoteUserName} changed right to ${pc.connectionState}`);
+      logRcaInstrument('CONN_STATE', `Link with ${remoteUserName} changed to ${pc.connectionState}`);
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        logRcaInstrument('RCA_RECOVERY', `Connection dropped or failed with ${remoteUserName}. Retrying peer connection cleanup & offer initiation.`);
+        logRcaInstrument('RCA_RECOVERY', `Connection dropped with ${remoteUserName}. Retrying connection cleanup right now.`);
       }
     };
 
@@ -351,9 +357,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
       });
-      logRcaInstrument('TRACKS_ATTACHED', `Attached ${localStreamRef.current.getTracks().length} physical video/audio tracks to ${remoteUserName}.`);
+      logRcaInstrument('TRACKS_ATTACHED', `Attached ${localStreamRef.current.getTracks().length} physical video/audio tracks right to ${remoteUserName}.`);
     } else {
-      logRcaInstrument('RCA_ERROR', `createPeerConnection run while localStreamRef has zero active hardware tracks for ${remoteUserName}!`);
+      logRcaInstrument('RCA_ERROR', `createPeerConnection run while localStreamRef has zero active tracks right right for ${remoteUserName}!`);
     }
 
     pc.onicecandidate = (e) => {
@@ -421,6 +427,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     startLocalWebcam(nextMode);
   };
 
+  // STEP 2: LOCAL VIDEO TOUCH-TO-IDENTIFY
   const handleTouchIdentify = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (isAiProcessing || videoDisabled || isVoiceRecording) return;
     
@@ -439,7 +446,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
     if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
 
-    const newTarget: TouchTargetState = { x: Math.round(clickX), y: Math.round(clickY), isLoading: true };
+    const newTarget: TouchTargetState = { x: Math.round(clickX), y: Math.round(clickY), isLoading: true, authorName: currentUser?.name || 'You' };
     setActiveTouchTarget(newTarget);
     playTouchTone('start');
     unlockSpeechSynthesisSynchronously();
@@ -453,6 +460,116 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
 
     captureFrameAndSendToAi(undefined, { x: newTarget.x, y: newTarget.y });
+  };
+
+  // STEP 3: REMOTE PEER VIDEO TOUCH & SHARED POINTER EXTENSION
+  const handleRemoteTouchIdentify = async (
+    e: React.MouseEvent<HTMLDivElement>,
+    remotePeerId: string,
+    remotePeerName: string,
+    remoteVideoEl: HTMLVideoElement | null
+  ) => {
+    if (isAiProcessing || isVoiceRecording) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+    const existingTarget = remoteTouchMap[remotePeerId];
+    if (existingTarget && Math.abs(existingTarget.x - clickX) < 8 && Math.abs(existingTarget.y - clickY) < 8) {
+      setRemoteTouchMap(prev => ({ ...prev, [remotePeerId]: null }));
+      if (channelRef.current && currentUser) {
+        channelRef.current.send({ type: 'broadcast', event: 'touch-target-sync', payload: { peerId: remotePeerId, target: null } });
+      }
+      return;
+    }
+
+    const newTarget: TouchTargetState = { x: Math.round(clickX), y: Math.round(clickY), isLoading: true, authorName: currentUser?.name || 'You' };
+    setRemoteTouchMap(prev => ({ ...prev, [remotePeerId]: newTarget }));
+    playTouchTone('start');
+    unlockSpeechSynthesisSynchronously();
+
+    if (channelRef.current && currentUser) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'touch-target-sync',
+        payload: { peerId: remotePeerId, target: { ...newTarget, authorName: currentUser?.name || 'Friend' } }
+      });
+    }
+
+    if (!remoteVideoEl) return;
+
+    setIsAiProcessing(true);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsAiSpeaking(false);
+    setTelemetryStatus(`Inspecting item touched directly inside ${remotePeerName}'s video...`);
+
+    setTimeout(async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = remoteVideoEl.videoWidth || 1280;
+        canvas.height = remoteVideoEl.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { setIsAiProcessing(false); return; }
+
+        ctx.drawImage(remoteVideoEl, 0, 0, canvas.width, canvas.height);
+        const base64Frame = canvas.toDataURL('image/jpeg', 0.88);
+        lastCapturedImageRef.current = base64Frame;
+
+        const response = await fetch('/api/live-call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frameBase64: base64Frame,
+            touchTarget: { x: newTarget.x, y: newTarget.y },
+            remotePeerName: remotePeerName,
+            currentUserName: currentUser?.name || 'Anuj'
+          })
+        });
+
+        const data = await response.json();
+        const reply = data.spokenReply || `I verified your remote touch target right now!`;
+        const targetLabel = data.telemetry?.targetLabel || reply.split('.')[0] || 'Target Item';
+
+        setIsAiProcessing(false);
+        setIsAiSpeaking(true);
+        setTelemetryStatus(`Target across ${remotePeerName}'s view confirmed: ${targetLabel}`);
+
+        const resolvedTarget: TouchTargetState = { x: newTarget.x, y: newTarget.y, label: targetLabel, isLoading: false, authorName: currentUser?.name || 'You' };
+        setRemoteTouchMap(prev => ({ ...prev, [remotePeerId]: resolvedTarget }));
+        if (channelRef.current && currentUser) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'touch-target-sync',
+            payload: { peerId: remotePeerId, target: { ...resolvedTarget, authorName: currentUser.name } }
+          });
+        }
+
+        setTimeout(() => {
+          setRemoteTouchMap(prev => ({ ...prev, [remotePeerId]: null }));
+          if (channelRef.current && currentUser) {
+            channelRef.current.send({ type: 'broadcast', event: 'touch-target-sync', payload: { peerId: remotePeerId, target: null } });
+          }
+        }, 5000);
+
+        const cleanLogSummary = `🎯 Targeted Item straight across ${remotePeerName}'s Video: "${reply}"`;
+        sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
+
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(reply);
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          utterance.onend = () => setIsAiSpeaking(false);
+          utterance.onerror = () => setIsAiSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch (err: any) {
+        setIsAiProcessing(false);
+        console.warn('Remote video check warning:', err);
+      }
+    }, 110);
   };
 
   const handleTapAndSpeakToggle = () => {
@@ -497,7 +614,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
         recorder.onstop = async () => {
           setIsVoiceRecording(false);
-          setTelemetryStatus('Evaluating visual request...');
+          setTelemetryStatus('Evaluating visual parameters right now...');
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -566,14 +683,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           body: JSON.stringify({
             frameBase64: base64Frame,
             audioBase64: recordedAudioBase64 || null,
-            questionText: recordedAudioBase64 ? undefined : "Describe literally what physical object appears across this picture out loud.",
+            questionText: recordedAudioBase64 ? undefined : "Describe what physical object appears right inside this picture out loud.",
             touchTarget: touchedCoords || null,
             currentUserName: currentUser?.name || 'Anuj'
           })
         });
 
         const data = await response.json();
-        const reply = data.spokenReply || `I verified your visual target right now!`;
+        const reply = data.spokenReply || `I verified your targeted view right now!`;
         const targetLabel = data.telemetry?.targetLabel || reply.split('.')[0] || 'Target Item';
 
         setIsAiProcessing(false);
@@ -581,7 +698,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
         if (touchedCoords) {
-          const resolvedTarget: TouchTargetState = { x: touchedCoords.x, y: touchedCoords.y, label: targetLabel, isLoading: false };
+          const resolvedTarget: TouchTargetState = { x: touchedCoords.x, y: touchedCoords.y, label: targetLabel, isLoading: false, authorName: currentUser?.name || 'You' };
           setActiveTouchTarget(resolvedTarget);
           if (channelRef.current && currentUser) {
             channelRef.current.send({
@@ -630,7 +747,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
 
     if (channelRef.current && currentUser) {
-      logRcaInstrument('PEER_LEAVE_TRANSMIT', 'Sending peer-leave explicit disconnect broadcast across websocket prior to cleanup');
+      logRcaInstrument('PEER_LEAVE_TRANSMIT', 'Sending peer-leave explicit disconnect broadcast prior right to cleanup');
       try {
         channelRef.current.send({
           type: 'broadcast',
@@ -655,6 +772,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     setIsTranslateArActive(false);
     setArTranslations([]);
     setActiveTouchTarget(null);
+    setRemoteTouchMap({});
   };
 
   const handleHangUp = () => {
@@ -674,7 +792,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           <span className="font-extrabold text-white text-xs sm:text-sm truncate">
             {groupTitle || 'Live Video Studio'}
           </span>
-          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[320px]">
+          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[340px]">
             {telemetryStatus}
           </span>
         </div>
@@ -723,7 +841,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             <button type="button" onClick={() => setShowRcaPanel(false)} className="text-slate-400 hover:text-white font-sans text-xs">✕ Close Panel</button>
           </div>
           {rcaLogs.length === 0 ? (
-            <p className="text-slate-400 italic py-1">No diagnostic connection lifecycle events recorded right inside this session yet.</p>
+            <p className="text-slate-400 italic py-1">No diagnostic connection events recorded inside this session right yet.</p>
           ) : (
             <div className="space-y-1">
               {rcaLogs.map((log, index) => (
@@ -773,11 +891,12 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               
               {activeTouchTarget.isLoading ? (
                 <span className="mt-1.5 bg-slate-900/90 text-amber-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xl whitespace-nowrap">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Identifying...
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> {activeTouchTarget.authorName ? `${activeTouchTarget.authorName} targeting...` : `Identifying...`}
                 </span>
               ) : activeTouchTarget.label ? (
-                <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex items-center gap-1.5">
-                  <span className="text-amber-400">🎯</span> {activeTouchTarget.label}
+                <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex flex-col sm:flex-row sm:items-center gap-1 text-center">
+                  <span className="text-amber-400 font-extrabold text-[10px] uppercase">{activeTouchTarget.authorName && activeTouchTarget.authorName !== 'You' ? `${activeTouchTarget.authorName}:` : '🎯'}</span>
+                  <span>{activeTouchTarget.label}</span>
                 </span>
               ) : null}
             </div>
@@ -828,13 +947,17 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           </div>
         </div>
 
-        {/* TILE 2+: REMOTE PEER VIDEO TRACKS + TARGETED AR & TOUCH OVERLAYS */}
+        {/* TILE 2+: REMOTE PEER VIDEO TRACKS + STEP 3 REMOTE TOUCH INTERACTIVITY */}
         {remoteStreams.map(peer => {
           const peerArItems = remoteArMap[peer.peerId] || [];
           const peerTouchTarget = remoteTouchMap[peer.peerId];
 
           return (
-            <div key={peer.peerId} className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
+            <div
+              key={peer.peerId}
+              onClick={(e) => handleRemoteTouchIdentify(e, peer.peerId, peer.peerName, e.currentTarget.querySelector('video'))}
+              className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end cursor-crosshair sm:cursor-pointer select-none"
+            >
               <video
                 ref={(node) => {
                   if (node && node.srcObject !== peer.stream) {
@@ -847,7 +970,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
               />
 
-              {/* REMOTE PEER TOUCH TARGET RING (`Synced exclusively over scanning peer's tile`) */}
+              {/* STEP 3 REMOTE PEER TOUCH TARGET RING (`Synced across room`) */}
               {peerTouchTarget && (
                 <div
                   style={{ left: `${peerTouchTarget.x}%`, top: `${peerTouchTarget.y}%`, transform: 'translate(-50%, -50%)' }}
@@ -860,11 +983,12 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                   
                   {peerTouchTarget.isLoading ? (
                     <span className="mt-1.5 bg-slate-900/90 text-amber-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xl whitespace-nowrap">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Identifying...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> {peerTouchTarget.authorName ? `${peerTouchTarget.authorName} tapping...` : `Identifying...`}
                     </span>
                   ) : peerTouchTarget.label ? (
-                    <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex items-center gap-1.5">
-                      <span className="text-amber-400">🎯</span> {peerTouchTarget.label}
+                    <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex flex-col sm:flex-row sm:items-center gap-1 text-center">
+                      <span className="text-amber-400 font-extrabold text-[10px] uppercase">{peerTouchTarget.authorName && peerTouchTarget.authorName !== 'You' ? `${peerTouchTarget.authorName}'s pointer:` : '🎯'}</span>
+                      <span>{peerTouchTarget.label}</span>
                     </span>
                   ) : null}
                 </div>
@@ -974,7 +1098,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-rose-600 ring-4 ring-rose-400 text-white animate-bounce'
               : 'bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 text-white hover:opacity-95'
           }`}
-          title="Tap to speak your question aloud and tap again when done"
+          title="Tap to speak your question aloud and tap again right right when done"
         >
           {isAiProcessing ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Sparkles className="w-6 h-6 text-white" />}
         </button>
@@ -983,7 +1107,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           type="button"
           onClick={handleHangUp}
           className="p-3.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center border border-rose-500 shadow-xl active:scale-95"
-          title="End Call and save clean summary notes into group chat timeline"
+          title="End Call and save clean summary notes straight right right right into group chat timeline"
         >
           <PhoneOff className="w-5 h-5 text-white" />
         </button>
