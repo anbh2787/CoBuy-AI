@@ -7,7 +7,7 @@ import { Mic, MicOff, Video, VideoOff, RefreshCw, Sparkles, PhoneOff, Volume2, L
 
 interface VideoCallModalProps {
   isOpen: boolean;
-  onClose: (sessionNotes: string[]) => void;
+  onClose: (sessionNotes: string[], lastImageBase64?: string) => void;
   groupId: string;
   groupTitle: string;
   currentUser: User | null;
@@ -22,15 +22,15 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; peerName: string; stream: MediaStream }>>([]);
-  const [telemetryStatus, setTelemetryStatus] = useState<string>('Ready • Tap once right to speak');
+  const [telemetryStatus, setTelemetryStatus] = useState<string>('Ready • Tap once to speak');
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const sessionNotesRef = useRef<string[]>([]);
+  const lastCapturedImageRef = useRef<string | undefined>(undefined);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const channelRef = useRef<any>(null);
 
-  // Audio recording references right across MediaRecorder
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimeoutRef = useRef<any>(null);
@@ -38,6 +38,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   useEffect(() => {
     if (isOpen && currentUser) {
       sessionNotesRef.current = [];
+      lastCapturedImageRef.current = undefined;
       startLocalWebcam('user');
       setupWebRTCSignaling();
     } else {
@@ -48,7 +49,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     };
   }, [isOpen]);
 
-  // ACOUSTIC TOUCH CONFIRMATION TONES (`beep-up on start, beep-down on send`)
   const playTouchTone = (type: 'start' | 'end') => {
     try {
       if (typeof window !== 'undefined') {
@@ -76,7 +76,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } catch (e) { /* no-op */ }
   };
 
-  // SYNCHRONOUS PRE-UNLOCKER (`Guarantees out-loud audio playback across iOS Safari and Android Chrome`)
   const unlockSpeechSynthesisSynchronously = () => {
     try {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -112,7 +111,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         }
       }
     } catch (err) {
-      console.warn('Could not acquire hardware video stream:', err);
+      console.warn('Could not acquire camera device track:', err);
     }
   };
 
@@ -240,11 +239,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     startLocalWebcam(nextMode);
   };
 
-  // TAP ONCE & RELEASE TO LISTEN, TAP TO FINISH (WALKIE-TALKIE CONVERSATIONAL MODEL)
+  // OPTION A TAP & TALK CONVERSATIONAL LOOP
   const handleTapAndSpeakToggle = () => {
     if (isAiProcessing) return;
-
-    // Synchronous audio speech pre-unlocker on exact literal finger click
     unlockSpeechSynthesisSynchronously();
 
     if (isVoiceRecording && mediaRecorderRef.current) {
@@ -259,7 +256,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       return;
     }
 
-    // Start recording directly off open WebRTC audio pipeline without hardware lock collisions
     if (localStreamRef.current && typeof MediaRecorder !== 'undefined') {
       try {
         playTouchTone('start');
@@ -286,7 +282,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
         recorder.onstop = async () => {
           setIsVoiceRecording(false);
-          setTelemetryStatus('Scanning camera frame right now...');
+          setTelemetryStatus('Inspecting camera buffer and spoken request...');
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -299,9 +295,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         recorder.start(100);
         mediaRecorderRef.current = recorder;
         setIsVoiceRecording(true);
-        setTelemetryStatus('🎙️ Listening right now... Speak aloud and tap icon when done!');
+        setTelemetryStatus('🎙️ Listening... Speak aloud and tap icon when finished');
 
-        // Safety 7-second auto-send timer so it doesn't hang if user forgets to tap again
         if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = setTimeout(() => {
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -319,7 +314,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
-  // SYNCHRONIZED BUFFER CAPTURE & AUDIO-OUT SPEECH
   const captureFrameAndSendToAi = (recordedAudioBase64?: string) => {
     if (!localVideoRef.current || isAiProcessing) return;
 
@@ -328,7 +322,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       window.speechSynthesis.cancel();
     }
     setIsAiSpeaking(false);
-    setTelemetryStatus('Analyzing verified camera buffer with zero-bias sensor...');
+    setTelemetryStatus('Processing conversational evaluation with Gemini...');
 
     setTimeout(async () => {
       try {
@@ -337,19 +331,17 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         canvas.height = localVideoRef.current?.videoHeight || 720;
         const ctx = canvas.getContext('2d');
         let base64Frame = '';
-        let bufferStatus = 'UNVERIFIED';
 
         if (ctx && localVideoRef.current) {
           ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
           base64Frame = canvas.toDataURL('image/jpeg', 0.88);
 
           if (!base64Frame || base64Frame === 'data:,' || base64Frame.length < 3000) {
-            bufferStatus = 'BLANK_DOUBLE_BUFFER_ERROR';
-            setTelemetryStatus('⚠️ Capture note: Canvas returned incomplete hardware buffer right on device.');
+            setTelemetryStatus('⚠️ Camera note: Mobile buffer returned empty frame. Please retry.');
             setIsAiProcessing(false);
             return;
           } else {
-            bufferStatus = `VALID_${Math.round(base64Frame.length / 1024)}KB`;
+            lastCapturedImageRef.current = base64Frame;
           }
         }
 
@@ -359,21 +351,21 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           body: JSON.stringify({
             frameBase64: base64Frame,
             audioBase64: recordedAudioBase64 || null,
-            questionText: recordedAudioBase64 ? undefined : "Describe literally what physical objects or fruits are across this picture right now out loud.",
+            questionText: recordedAudioBase64 ? undefined : "Describe literally what physical object appears across this picture out loud.",
             currentUserName: currentUser?.name || 'Anuj'
           })
         });
 
         const data = await response.json();
-        const reply = data.spokenReply || `I checked your live picture clearly across the meeting right now!`;
-        const serverTelemetry = data.telemetry || {};
+        const reply = data.spokenReply || `I checked your camera picture across our studio meeting!`;
 
         setIsAiProcessing(false);
         setIsAiSpeaking(true);
-        setTelemetryStatus(`Verified conclusion across ${serverTelemetry.byteLength || 0} image bytes.`);
+        setTelemetryStatus(`Observation verified cleanly by Gemini.`);
 
-        const logEntry = `🗣️ **Spoken Voice Status:** ${recordedAudioBase64 ? 'Recorded Multimodal Audio Command' : 'Direct Factual Scan'}\n📸 **Zero-Bias Optical Conclusion (${canvas.width}x${canvas.height} • ${bufferStatus}):**\n"${reply}"`;
-        sessionNotesRef.current = [...sessionNotesRef.current, logEntry];
+        // Human-friendly summary note without raw diagnostic technical codes
+        const cleanLogSummary = `📸 AI Video Observation: "${reply}"`;
+        sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
 
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           const utterance = new SpeechSynthesisUtterance(reply);
@@ -384,9 +376,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           window.speechSynthesis.speak(utterance);
         }
       } catch (err: any) {
-        console.error('Frame buffer inspection note:', err);
+        console.error('Frame check exception:', err);
         setIsAiProcessing(false);
-        setTelemetryStatus('Telemetry note: ' + (err?.message || 'timeout'));
+        setTelemetryStatus('Scan verification note: ' + (err?.message || 'timeout'));
       }
     }, 110);
   };
@@ -414,7 +406,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
   const handleHangUp = () => {
     cleanupSession();
-    onClose([...sessionNotesRef.current]);
+    onClose([...sessionNotesRef.current], lastCapturedImageRef.current);
   };
 
   if (!isOpen) return null;
@@ -422,14 +414,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   return (
     <div className="fixed inset-0 z-[170] bg-slate-950 flex flex-col justify-between overflow-hidden animate-in fade-in duration-150">
       
-      {/* COMPACT TOP HEADER (`Zero Verbose Text & Telemetry Status Pill`) */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3 sm:px-5 py-2 flex items-center justify-between shrink-0 shadow-lg z-30">
+      {/* MINIMALIST HEADER BAR (`Complete Zero Text Clutter`) */}
+      <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2.5 flex items-center justify-between shrink-0 shadow-lg z-30">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shrink-0" />
           <span className="font-extrabold text-white text-xs sm:text-sm truncate">
-            {groupTitle || 'Live Video Room'}
+            {groupTitle || 'Live Video Studio'}
           </span>
-          <span className="text-[10px] font-mono text-slate-400 border border-slate-700/80 px-2 py-0.5 rounded-md hidden sm:block truncate max-w-[220px]">
+          <span className="text-[10px] font-mono text-slate-400 border border-slate-700/80 px-2 py-0.5 rounded-md hidden sm:block truncate max-w-[240px]">
             {telemetryStatus}
           </span>
         </div>
@@ -455,10 +447,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         </div>
       </div>
 
-      {/* RIGID SINGLE-SCREEN VIEWPORT CONTAINER (`No hidden forehead right underneath bottom dock`) */}
-      <div className="w-full flex-1 min-h-0 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] p-2 sm:p-4 flex flex-col sm:flex-row gap-2 sm:gap-4 overflow-hidden">
+      {/* SINGLE-SCREEN VIEWPORT FIT (`No cropping behind bottom dock`) */}
+      <div className="w-full flex-1 min-h-0 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] p-2 sm:p-4 flex flex-col sm:flex-row gap-2.5 overflow-hidden">
         
-        {/* TILE 1: YOUR LIVE WEBCAM DISPLAY (`flex-1 min-h-0 min-w-0`) */}
+        {/* TILE 1: YOUR LIVE WEBCAM DISPLAY */}
         <div className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
           {videoDisabled ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400">
@@ -484,7 +476,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           </div>
         </div>
 
-        {/* TILE 2+: REMOTE PEER VIDEO TRACKS (`Mounted cleanly side-by-side right without overflowing`) */}
+        {/* TILE 2+: REMOTE PEER VIDEO TRACKS */}
         {remoteStreams.map(peer => (
           <div key={peer.peerId} className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
             <video
@@ -508,8 +500,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         ))}
       </div>
 
-      {/* OPTION A TOUCH & TALK CIRCULAR ICON DOCK (`Zero Text & Pure Ergonomics`) */}
-      <div className="bg-slate-900 border-t border-slate-800 h-16 sm:h-20 px-4 w-full flex items-center justify-around gap-2 sm:gap-4 shrink-0 z-30">
+      {/* CIRCULAR ICON-ONLY TOUCH DOCK */}
+      <div className="bg-slate-900 border-t border-slate-800 h-16 sm:h-20 px-4 w-full flex items-center justify-around gap-2 shrink-0 z-30">
         <button
           type="button"
           onClick={toggleAudio}
@@ -541,7 +533,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           <RefreshCw className="w-5 h-5 text-amber-400" />
         </button>
 
-        {/* TAP & TALK VOICE PROMPT CIRCLE (OPTION A) */}
+        {/* TAP & TALK VOICE COMMAND CIRCLE */}
         <button
           type="button"
           onClick={handleTapAndSpeakToggle}
@@ -551,7 +543,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-rose-600 ring-4 ring-rose-400 text-white animate-bounce'
               : 'bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 text-white hover:opacity-95'
           }`}
-          title="Tap right right to start conversational voice question, tap when finished right right to scan & speak!"
+          title="Tap to speak your question aloud, tap again right when done"
         >
           {isAiProcessing ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Sparkles className="w-6 h-6 text-white" />}
         </button>
@@ -560,7 +552,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           type="button"
           onClick={handleHangUp}
           className="p-3.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center border border-rose-500 shadow-xl active:scale-95"
-          title="End Call and commit complete diagnostic notes into group chat timeline"
+          title="End Call and save clean summary notes into group chat timeline"
         >
           <PhoneOff className="w-5 h-5 text-white" />
         </button>

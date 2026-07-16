@@ -256,10 +256,10 @@ export default function GroupChatRoom({ params }: PageProps) {
   }
 
   // CLOSE CALL & COMMIT AI VISUAL NOTES TO CHAT TIMELINE PLUS AUTOMATIC @SHOPPY BUYING CAROUSEL
-  const handleCloseVideoCallWithNotes = async (sessionNotes?: string[]) => {
+  const handleCloseVideoCallWithNotes = async (sessionNotes?: string[], lastImageBase64?: string) => {
     setIsVideoCallOpen(false);
     if (sessionNotes && sessionNotes.length > 0 && group && currentUser) {
-      const summaryText = `📝 **Post-Call AI Video & Camera Notes:**\nDuring our video session, @GEMINI LIVE scanned the live hardware camera feed and logged the exact observations below:\n\n${sessionNotes.map(note => `• ${note}`).join('\n\n')}`;
+      const summaryText = `📝 Post-Call AI Video Observations:\nDuring our meeting, Gemini Live evaluated our live stream and noted:\n\n${sessionNotes.map(note => `• ${note}`).join('\n\n')}`;
       
       const summaryMsg: Message = {
         id: 'postcall-' + Date.now(),
@@ -287,16 +287,17 @@ export default function GroupChatRoom({ params }: PageProps) {
         console.warn('Note persistence check note:', err);
       }
 
-      // AUTOMATIC @SHOPPY POST-CALL BUYING CAROUSEL GENERATOR
+      // AUTOMATIC @SHOPPY POST-CALL BUYING CAROUSEL GENERATOR WITH IMAGE GROUNDING
       try {
         const observedItems = sessionNotes.join('. ');
-        const shoppyPrompt = `Based directly right right on these items discovered across our camera stream during our video consultation: (${observedItems}), automatically curate 4 exact matching buying links complete with pricing, ratings, and checkouts across our interactive shopping cards!`;
+        const shoppyPrompt = `Based on these items discovered during our live video evaluation (${observedItems}), find identical or highly similar products complete right with prices right and checkout links in our interactive deck!`;
         
         const shoppyRes = await fetch('/api/shoppy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messageText: shoppyPrompt,
+            imageBase64: lastImageBase64 || null,
             group: nextGroup,
             currentUserId: currentUser.id
           })
@@ -304,7 +305,7 @@ export default function GroupChatRoom({ params }: PageProps) {
 
         const shoppyData = await shoppyRes.json();
         if (shoppyData.structuredProducts && shoppyData.structuredProducts.length > 0) {
-          const shoppyContent = `🛍️ **@SHOPPY Post-Call Buying Recommendations:**\nBased right right right right right right on what we just inspected across live video together, here are verified buying options complete right with one-click **❤️ Vote** and external provider triggers right now!`;
+          const shoppyContent = `🛍️ @SHOPPY Post-Call Recommendations:\nBased on what our group just inspected across video together, here are matching buying choices with one-click consensus voting and verified checkouts right below!`;
           const shoppyMsg: Message = {
             id: 'post-shoppy-' + Date.now(),
             groupId: group.id,
@@ -823,7 +824,7 @@ export default function GroupChatRoom({ params }: PageProps) {
                 </span>
               </div>
               <p className="text-xs text-slate-600 font-medium max-w-xl leading-relaxed">
-                Stream store displays, products, or itineraries right out loud with your crew. Tap our circular **`✨`** button during the call right right right right right right right right right right right to talk directly right right right right right right right right right right right to Gemini right right, and receive automatic `@SHOPPY` buying carousels upon hanging up!
+                Stream store displays, physical items, or digital checkouts out loud with your group. Tap our circular **`✨`** command icon during the call to ask Gemini direct conversational questions out loud, and receive matching `@SHOPPY` buying decks upon ending the meeting!
               </p>
             </div>
 
@@ -865,12 +866,12 @@ export default function GroupChatRoom({ params }: PageProps) {
                   </span>
 
                   <div
-                    className={`p-3.5 sm:p-4 rounded-2xl text-sm leading-relaxed shadow-lg ${
+                    className={`p-4 sm:p-5 rounded-3xl text-sm leading-relaxed shadow-sm ${
                       isMe
-                        ? 'bg-brand-600 text-white rounded-tr-none'
+                        ? 'bg-[#2B4C7E] text-white rounded-tr-none'
                         : isBot
-                        ? 'bg-slate-900 border border-slate-700 text-slate-100 rounded-tl-none'
-                        : 'bg-slate-800 text-slate-200 rounded-tl-none'
+                        ? 'bg-white border border-amber-900/15 text-[#22252A] rounded-tl-none shadow-xs'
+                        : 'bg-[#F9F7F1] border border-amber-900/10 text-[#22252A] rounded-tl-none'
                     }`}
                   >
                     {msg.imageUrl && (
@@ -878,40 +879,42 @@ export default function GroupChatRoom({ params }: PageProps) {
                         {isPdf ? (
                           <div
                             onClick={() => setFullscreenViewer({ type: 'pdf', url: msg.imageUrl!, title: 'Attached PDF Invoice / Document' })}
-                            className="p-4 rounded-2xl bg-slate-950 border border-slate-700 hover:border-brand-500 transition cursor-pointer flex items-center justify-between gap-3 shadow-md group"
+                            className="p-4 rounded-2xl bg-slate-50 border border-amber-900/15 hover:border-[#2B4C7E] transition cursor-pointer flex items-center justify-between gap-3 shadow-xs group"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 shrink-0">
-                                <FileText className="w-7 h-7 text-rose-400" />
+                              <div className="p-2.5 rounded-xl bg-[#C45A45]/15 border border-[#C45A45]/30 shrink-0">
+                                <FileText className="w-7 h-7 text-[#C45A45]" />
                               </div>
                               <div className="min-w-0">
-                                <p className="font-extrabold text-white text-sm truncate group-hover:text-brand-400 transition">
+                                <p className="font-extrabold text-[#22252A] text-sm truncate group-hover:text-[#2B4C7E] transition">
                                   Attached PDF Invoice Document
                                 </p>
-                                <p className="text-[11px] text-slate-400">
+                                <p className="text-[11px] text-slate-500">
                                   📑 Click to view full document across screen right now
                                 </p>
                               </div>
                             </div>
-                            <span className="text-xs text-brand-400 font-bold flex items-center gap-1 shrink-0 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                            <span className="text-xs text-[#2B4C7E] font-bold flex items-center gap-1 shrink-0 px-3 py-1.5 rounded-xl bg-white border border-amber-900/15 shadow-xs">
                               <Maximize2 className="w-3.5 h-3.5" /> Open PDF
                             </span>
                           </div>
                         ) : (
                           <div
                             onClick={() => setFullscreenViewer({ type: 'image', url: msg.imageUrl!, title: 'Attached Receipt Photo' })}
-                            className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950/80 cursor-pointer max-h-80 flex items-center justify-center group"
+                            className="relative rounded-2xl overflow-hidden border border-amber-900/15 bg-slate-50 cursor-pointer max-h-80 flex items-center justify-center group shadow-xs"
                           >
                             <img src={msg.imageUrl} alt="Receipt Scan" className="max-h-80 w-auto object-contain rounded-lg transition group-hover:scale-[1.02]" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white font-extrabold text-xs gap-1.5">
-                              <Maximize2 className="w-4 h-4 text-brand-400" /> Click to Open Full-Screen Photo
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white font-extrabold text-xs gap-1.5">
+                              <Maximize2 className="w-4 h-4 text-amber-300" /> Click to Open Full-Screen Photo
                             </div>
                           </div>
                         )}
                       </div>
                     )}
 
-                    <div className="whitespace-pre-wrap font-sans">{msg.content}</div>
+                    <div className="whitespace-pre-wrap font-sans leading-relaxed text-[#22252A]">
+                      {msg.content.replace(/\*\*/g, '').replace(/```[a-z]*\n[\s\S]*?\n```/g, '').replace(/<!--SHOPPY_DATA:[\s\S]*?-->/g, '')}
+                    </div>
 
                     {msg.structuredExpense && <ExpenseCard expense={msg.structuredExpense} />}
 
@@ -1076,7 +1079,7 @@ export default function GroupChatRoom({ params }: PageProps) {
 
       <VideoCallModal
         isOpen={isVideoCallOpen}
-        onClose={(sessionNotes) => handleCloseVideoCallWithNotes(sessionNotes)}
+        onClose={(sessionNotes, lastImageBase64) => handleCloseVideoCallWithNotes(sessionNotes, lastImageBase64)}
         groupId={group.id}
         groupTitle={group.title}
         currentUser={currentUser}

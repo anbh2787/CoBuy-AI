@@ -8,7 +8,7 @@ export async function POST(req: Request) {
 
     if (!frameBase64 || frameBase64.length < 2000 || frameBase64 === 'data:,') {
       return NextResponse.json({
-        spokenReply: `⚠️ Audio Notice: The visual picture buffer arrived incomplete right right from device hardware. Center your camera right right right to try again!`,
+        spokenReply: `⚠️ Camera Notice: The frame arrived empty from device hardware. Please center your camera on the item to retry!`,
         telemetry: { status: 'BLANK_OR_EMPTY_BUFFER_REJECTED', byteLength: frameBase64?.length || 0 }
       }, { status: 200 });
     }
@@ -42,15 +42,15 @@ export async function POST(req: Request) {
         }
 
         const prompt = `
-You are an objective, ultra-accurate optical computer vision sensor and factual spoken audio co-pilot.
-Examine literally what physical visual pixels exist across the provided photograph directly above.
-${audioBase64 ? "Listen to the user's attached spoken audio voice prompt right right alongside the photo." : `User asks verbally: "${questionText || "Describe what physical object across this picture looks like out loud."}"`}
+You are @GEMINI LIVE AI, an objective, visually sharp conversational voice co-pilot inside an active video collaboration call.
+Analyze the literal physical pixels across the provided photo above.
+${audioBase64 ? "Listen carefully to the user's attached spoken voice recording along with the picture." : `User asks verbally: "${questionText || "Describe what physical object across this picture looks like out loud."}"`}
 
-Strict factual rules for spoken voice delivery:
-1. Speak concisely (around 2 friendly sentences) in natural conversational format suitable for out-loud audio delivery.
-2. ZERO-BIAS FACTUAL RULE: Describe EXCLUSIVELY what physical items, objects, colors, digits, or fruits appear across this literal photo! If the picture shows an apple resting across a table, literally state you observe the apple. If it shows a microphone right right or living room wall right without legible paper bills, literally state you observe the microphone and room setup.
-3. NEVER assume or hallucinate train tickets, receipts, or external locations unless literally printed across physical paper right inside the photo!
-4. If the photograph arrived out of focus or dark across your sensor, explicitly state out loud: "I cannot read specific numbers or features until the camera picture right right right right is sharply centered."
+Strict conversational rules for spoken voice delivery:
+1. FIRST listen right to and directly answer what the user is asking across their voice command! If the user asks whether a piece of furniture or bed is good quality, or what it costs, immediately provide your direct conversational evaluation out loud rather than merely listing static room items.
+2. ZERO-BIAS FACTUAL GROUNDING: Base all product identification directly on literal items observable across this exact photo. Never invent external train tickets or fictitious items not shown on screen.
+3. Keep your spoken audio reply natural, friendly, and concise (around 2 clear conversational sentences) completely suitable right for out-loud delivery across speakers.
+4. Do not include raw markdown symbols or repetitive filler words across your response text.
 `;
         parts.push(prompt);
 
@@ -59,7 +59,7 @@ Strict factual rules for spoken voice delivery:
         const cleanSpoken = responseText.replace(/[*#_`~]/g, '').trim();
 
         return NextResponse.json({
-          spokenReply: cleanSpoken || `I clearly checked your visual frame right across the meeting right now! Ask about any literal physical item whenever ready.`,
+          spokenReply: cleanSpoken || `I clearly checked your visual frame across our meeting right now! Ask about any observable real item whenever ready.`,
           telemetry: {
             status: 'VALID_PIXELS_INSPECTED',
             byteLength: matches ? matches[1].length : frameBase64.length,
@@ -68,19 +68,19 @@ Strict factual rules for spoken voice delivery:
           }
         }, { status: 200 });
       } catch (geminiErr: any) {
-        console.error('Gemini live zero-bias check warning:', geminiErr);
+        console.error('Gemini live check warning:', geminiErr);
         return NextResponse.json({
-          spokenReply: `Neural model note: ${geminiErr.message}`,
+          spokenReply: `Neural model processing note: ${geminiErr.message}`,
           telemetry: { status: 'GEMINI_INFERENCE_ERROR', error: geminiErr.message }
         }, { status: 200 });
       }
     }
 
     return NextResponse.json({
-      spokenReply: `Hey ${currentUserName || 'Anuj'}, I clearly received your verified photo capture right right across our call (` + Math.round(frameBase64.length / 1024) + `KB)! Ask about any physical item across your view whenever ready.`,
+      spokenReply: `Hey ${currentUserName || 'Anuj'}, I received your high-resolution photo capture (` + Math.round(frameBase64.length / 1024) + `KB)! Ask about any item in view whenever ready.`,
       telemetry: { status: 'NO_API_KEY_FALLBACK', byteLength: frameBase64.length }
     }, { status: 200 });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to execute factual camera scan', details: error?.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to execute camera check', details: error?.message }, { status: 500 });
   }
 }

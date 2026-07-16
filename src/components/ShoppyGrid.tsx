@@ -16,8 +16,8 @@ export default function ShoppyGrid({ products, currentUserName, onVote, onDiscus
 
   return (
     <div className="mt-4 w-full">
-      <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-amber-400 mb-2">
-        <Sparkles className="w-4 h-4" /> @SHOPPY AI — Interactive Discovery Snap Carousel
+      <div className="flex items-center gap-2 text-xs font-extrabold text-[#2B4C7E] uppercase tracking-wider mb-3">
+        <Sparkles className="w-4 h-4 text-[#D99B26]" /> @SHOPPY AI — Curated Visual Recommendations
       </div>
 
       <div className="flex gap-4 overflow-x-auto py-2 px-1 pb-3 snap-x no-scrollbar">
@@ -28,37 +28,37 @@ export default function ShoppyGrid({ products, currentUserName, onVote, onDiscus
           return (
             <div
               key={item.id}
-              className="w-64 sm:w-72 shrink-0 bg-slate-900 border border-slate-700/90 rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between transition hover:border-amber-500/50 snap-start"
+              className="w-64 sm:w-72 shrink-0 bg-white border border-amber-900/15 rounded-[28px] overflow-hidden shadow-sm flex flex-col justify-between transition hover:border-[#2B4C7E]/40 snap-start text-[#22252A]"
             >
               <div>
                 {/* Visual Image Header */}
-                <div className="relative h-40 w-full bg-slate-950 overflow-hidden">
+                <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
                   <img
                     src={item.imageUrl}
                     alt={item.title}
                     className="w-full h-full object-cover transition hover:scale-105 duration-300"
                   />
-                  <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700/80 text-[11px] font-black text-amber-300 flex items-center gap-1">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span>{item.rating || '⭐ 4.8'}</span>
+                  <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-amber-900/10 text-xs font-black text-[#22252A] flex items-center gap-1 shadow-xs">
+                    <Star className="w-3 h-3 text-[#D99B26] fill-[#D99B26]" />
+                    <span>{item.rating || '4.8'}</span>
                   </div>
 
-                  <div className="absolute top-3 right-3 bg-slate-900/90 border border-slate-700 px-2.5 py-1 rounded-xl text-[10px] font-extrabold text-slate-300 uppercase tracking-wider truncate max-w-[110px]">
+                  <div className="absolute top-3 right-3 bg-[#2B4C7E]/95 text-white border border-transparent px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase tracking-wider truncate max-w-[110px] shadow-xs">
                     {item.vendor || 'Vendor'}
                   </div>
                 </div>
 
                 {/* Details Container */}
                 <div className="p-4.5 space-y-2">
-                  <h4 className="font-extrabold text-white text-base leading-snug tracking-tight truncate">
+                  <h4 className="font-extrabold text-[#22252A] text-base leading-snug tracking-tight line-clamp-2 min-h-[3.2rem]">
                     {item.title}
                   </h4>
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-black text-emerald-400">
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-lg font-black text-[#4A7C59]">
                       {item.price || `$${item.numericPrice}`}
                     </span>
                     {voteCount > 0 && (
-                      <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1">
+                      <span className="bg-[#C45A45]/15 text-[#C45A45] border border-[#C45A45]/25 px-2.5 py-0.5 rounded-full text-xs font-extrabold flex items-center gap-1">
                         ❤️ {voteCount} {voteCount === 1 ? 'Vote' : 'Votes'}
                       </span>
                     )}
@@ -66,51 +66,50 @@ export default function ShoppyGrid({ products, currentUserName, onVote, onDiscus
 
                   {/* Consensus Voters display block */}
                   {item.votes && item.votes.length > 0 && (
-                    <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 truncate">
-                      <strong className="text-slate-300">Voted by:</strong> {item.votes.join(', ')}
+                    <div className="pt-2 border-t border-amber-900/10 text-xs text-slate-500 truncate">
+                      <strong className="text-slate-700 font-bold">Voted by:</strong> {item.votes.join(', ')}
                     </div>
                   )}
                 </div>
               </div>
 
               {/* ACTION BUTTONS TOOLBAR */}
-              <div className="p-4 pt-1 space-y-2 bg-slate-900/90 border-t border-slate-800/60">
+              <div className="p-4 pt-2 space-y-2 bg-[#F9F7F1]/70 border-t border-amber-900/10">
                 <div className="flex items-center gap-2">
                   {/* VOTE TOGGLE */}
                   <button
                     type="button"
                     onClick={() => onVote(item.id)}
-                    className={`flex-1 py-2.5 px-3 rounded-2xl font-black text-xs transition flex items-center justify-center gap-1.5 border shadow-md ${
+                    className={`flex-1 py-2.5 px-3 rounded-2xl font-bold text-xs transition flex items-center justify-center gap-1.5 border shadow-xs active:scale-95 ${
                       hasVoted
-                        ? 'bg-rose-600/30 text-rose-300 border-rose-500/60 ring-1 ring-rose-500'
-                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+                        ? 'bg-[#C45A45] text-white border-[#C45A45]'
+                        : 'bg-white hover:bg-slate-50 text-[#22252A] border-amber-900/15'
                     }`}
                   >
-                    <Heart className={`w-3.5 h-3.5 ${hasVoted ? 'fill-rose-400 text-rose-400' : 'text-slate-400'}`} />
-                    <span>{hasVoted ? 'Voted!' : 'Vote'}</span>
+                    <Heart className={`w-3.5 h-3.5 ${hasVoted ? 'fill-white' : 'text-[#C45A45]'}`} />
+                    <span>{hasVoted ? 'Voted' : 'Vote'}</span>
                   </button>
 
-                  {/* DISCUSS / ASK FURTHER */}
+                  {/* DISCUSS IN CHAT */}
                   <button
                     type="button"
                     onClick={() => onDiscuss(item)}
-                    className="py-2.5 px-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-brand-400 font-extrabold text-xs transition flex items-center gap-1.5"
-                    title="Insert prompt asking @SHOPPY right right about this choice"
+                    className="flex-1 py-2.5 px-3 rounded-2xl bg-white hover:bg-slate-50 text-[#2B4C7E] font-bold text-xs transition border border-amber-900/15 flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
+                    <MessageSquare className="w-3.5 h-3.5 text-[#2B4C7E]" />
                     <span>Discuss</span>
                   </button>
                 </div>
 
-                {/* OPEN REAL PROVIDER WEBSITE */}
+                {/* OPEN PROVIDER CHECKOUT LINK */}
                 <a
-                  href={item.externalUrl || 'https://www.google.com/search?q=' + encodeURIComponent(item.title)}
+                  href={item.externalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:opacity-95 text-slate-950 font-black py-2.5 px-4 rounded-2xl transition text-xs flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-2.5 px-4 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-xs block active:scale-95"
                 >
-                  <ExternalLink className="w-4 h-4 text-slate-950" />
-                  <span>Open Provider Web Link</span>
+                  <span>Verify on Store & Buy</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-amber-300" />
                 </a>
               </div>
             </div>
