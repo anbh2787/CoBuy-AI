@@ -28,25 +28,30 @@ export async function POST(req: Request) {
             }
           },
           `
-You are a precision optical overlay engine right inside a live smartphone camera stream (like Google Lens AR).
-Examine the physical picture right now.
+You are a comprehensive optical character recognition and visual translation engine inside a live camera stream (Google Lens AR style).
+Examine the physical container, bottle, menu, or signs shown across the picture.
 
-Your exact instructions for clean optical overlay:
-1. Scan the central physical item, bottle, container, or sign for any non-English character text right across its face (` + `e.g. Japanese Kanji on a product bottle, foreign dining menus, or currency values` + `).
-2. INSTEAD OF FRAGMENTING TEXT INTO MULTIPLE OVERLAPPING TILES, consolidate the primary identity and instructions of the object right right into EXACTLY ONE single, unified English product summary string (or at most two widely separated distinct items if two entirely separate physical boxes sit next to each other on a table).
-   - For example, if aiming at a Japanese bottle showing brand and features, output: "Hakugen Earth: Extra Mint Cooling Spray for Clothing".
-   - If foreign currency is detected (e.g. ¥3,200), include the estimated USD price equivalent right beside the item name.
-3. Determine the approximate center-point visual coordinates (x, y percentages between 20 and 75) directly over where the physical label lettering appears on the product container so our frontend renders a singular flush decal over the physical label without cluttering the screen.
-4. Return a STRICT JSON block enclosed inside \`\`\`json blocks right right below.
+Your exact instructions:
+1. Translate EVERY distinct section of text visible across the physical object directly right into ${targetLanguage} (` + `e.g. Japanese Kanji/Kana on product labels, ingredient lists, instructions, cautions, and manufacturer names` + `). Do NOT leave out essential instructions or precautions just to be short!
+2. Group all detected text directly into ONE structured, multi-line translation dossier that completely reveals what all the visible Japanese or foreign paragraphs state in clean, natural English.
+   - Organize clearly right right across distinct lines:
+     🏷️ **Product Title & Brand**
+     ✨ **Features & Highlights**
+     📌 **Directions / How to Use**
+     ⚠️ **Precautions / Safety Notes**
+3. Estimate approximate normalized visual screen coordinates (` + `x, y percentages between 30 and 70` + `) over where the container is centered in the camera frame so our frontend renders a singular comprehensive translation decal over the physical item.
+4. Return a STRICT JSON format block enclosed inside \`\`\`json blocks containing this complete structured translation right below.
 
 Expected JSON schema inside response:
 \`\`\`json
 {
   "translations": [
     {
-      "original": "白元アース株式会社 衣類用冷感スプレー",
-      "translation": "Hakugen Earth: Extra Mint Cooling Spray for Clothing",
-      "x": 42,
+      "title": "Hakugen Earth: Ice Non Cooling Spray for Clothing",
+      "features": "Extra cool mint aroma, disinfecting & long-lasting odor neutralization.",
+      "instructions": "Spray directly across clothing from 10cm before wearing right right for instant cooling.",
+      "precautions": "Do NOT spray directly onto bare skin right or near open flame. Keep away right from eyes.",
+      "x": 45,
       "y": 45
     }
   ]
@@ -59,13 +64,20 @@ Expected JSON schema inside response:
         const responseText = result.response.text();
 
         const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-        let translations: Array<{ original: string; translation: string; x?: number; y?: number }> = [];
+        let translations: Array<{ title?: string; features?: string; instructions?: string; precautions?: string; translation?: string; x?: number; y?: number }> = [];
 
         if (jsonMatch && jsonMatch[1]) {
           try {
             const parsed = JSON.parse(jsonMatch[1]);
             if (parsed && Array.isArray(parsed.translations)) {
-              translations = parsed.translations.slice(0, 2);
+              translations = parsed.translations.map((t: any) => ({
+                title: t.title || t.translation || 'Translated Item',
+                features: t.features || '',
+                instructions: t.instructions || '',
+                precautions: t.precautions || '',
+                x: t.x || 45,
+                y: t.y || 45
+              })).slice(0, 1);
             }
           } catch (e) {
             console.warn("AR JSON parsing warning:", e);
@@ -74,10 +86,10 @@ Expected JSON schema inside response:
 
         return NextResponse.json({
           translations,
-          status: 'AR_OVERLAY_COMPLETE'
+          status: 'FULL_DETAILS_AR_COMPLETE'
         }, { status: 200 });
       } catch (geminiErr: any) {
-        console.error('AR model note:', geminiErr);
+        console.error('AR Translation model note:', geminiErr);
         return NextResponse.json({ translations: [], error: geminiErr.message }, { status: 200 });
       }
     }
@@ -85,8 +97,10 @@ Expected JSON schema inside response:
     return NextResponse.json({
       translations: [
         {
-          original: "Foreign Label",
-          translation: "Verified English AR Decal Demo ($25.00 USD)",
+          title: "Hakugen Earth: Ice Non Cooling Spray for Clothing",
+          features: "Extra cool mint aroma, fabric disinfecting & odor-neutralizing properties.",
+          instructions: "Spray directly onto fabric from 10cm before wearing right for instant cooling sensation.",
+          precautions: "Do NOT spray directly onto bare skin right right right or near open flame.",
           x: 45,
           y: 45
         }
@@ -94,6 +108,6 @@ Expected JSON schema inside response:
       status: 'DEMO_MODE'
     }, { status: 200 });
   } catch (error: any) {
-    return NextResponse.json({ error: 'AR loop failure', details: error?.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to run comprehensive AR translation loop', details: error?.message }, { status: 500 });
   }
 }

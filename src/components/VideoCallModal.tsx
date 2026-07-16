@@ -15,8 +15,12 @@ interface VideoCallModalProps {
 }
 
 interface ARTranslationItem {
-  original: string;
-  translation: string;
+  title?: string;
+  features?: string;
+  instructions?: string;
+  precautions?: string;
+  original?: string;
+  translation?: string;
   x?: number;
   y?: number;
 }
@@ -94,9 +98,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           if (data && Array.isArray(data.translations) && data.translations.length > 0) {
             setArTranslations(data.translations);
             data.translations.forEach((item: ARTranslationItem) => {
-              const noteString = `🌐 AR Translate: [${item.original}] → ${item.translation}`;
-              if (!sessionNotesRef.current.includes(noteString)) {
-                sessionNotesRef.current = [...sessionNotesRef.current, noteString];
+              const fullDetails = `🌐 AR Translation Complete:\n• Item & Brand: ${item.title || item.translation || 'Product'}\n• Highlights: ${item.features || 'N/A'}\n• Directions: ${item.instructions || 'N/A'}\n• Precautions: ${item.precautions || 'N/A'}`;
+              if (!sessionNotesRef.current.some(note => note.includes(item.title || item.translation || 'Item'))) {
+                sessionNotesRef.current = [...sessionNotesRef.current, fullDetails];
               }
             });
           }
@@ -540,18 +544,39 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             />
           )}
 
-          {/* FLUSH OPTICAL LENS OVERLAY (`Single Consolidated Lens Decal over item text`) */}
-          {arTranslations.slice(0, 2).map((item, idx) => (
+          {/* COMPREHENSIVE MULTI-SECTION OPTICAL OVERLAY CARD (`All Details right in 1 clean panel`) */}
+          {arTranslations.slice(0, 1).map((item, idx) => (
             <div
               key={idx}
               style={{
-                left: `${Math.min(Math.max(item.x || 45, 15), 65)}%`,
-                top: `${Math.min(Math.max(item.y || 45, 20), 75)}%`,
-                transform: 'translate(-40%, -50%)'
+                left: `${Math.min(Math.max(item.x || 48, 20), 60)}%`,
+                top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`,
+                transform: 'translate(-50%, -50%)'
               }}
-              className="absolute z-20 px-4 py-2 rounded-2xl bg-[#22252A]/90 backdrop-blur-md border-2 border-amber-400 text-amber-300 font-extrabold text-xs sm:text-sm shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex items-center justify-center text-center max-w-[80%] tracking-tight"
+              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
             >
-              <span>{item.translation}</span>
+              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
+                <span>🏷️</span>
+                <span className="truncate">{item.title || item.translation}</span>
+              </div>
+              
+              {item.features && (
+                <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight">
+                  <strong className="text-emerald-400 font-bold">Features:</strong> {item.features}
+                </div>
+              )}
+              
+              {item.instructions && (
+                <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight">
+                  <strong className="text-amber-300 font-bold">How to Use:</strong> {item.instructions}
+                </div>
+              )}
+
+              {item.precautions && (
+                <div className="text-[11px] sm:text-xs font-bold text-rose-300 bg-rose-950/40 p-2 rounded-xl border border-rose-500/30 leading-tight">
+                  <strong className="text-rose-400 uppercase">Caution:</strong> {item.precautions}
+                </div>
+              )}
             </div>
           ))}
 
