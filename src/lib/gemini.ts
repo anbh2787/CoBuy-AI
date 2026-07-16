@@ -122,9 +122,10 @@ Expected JSON schema right inside output:
         }
       }
 
-      const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
+      const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').replace(/\*\*/g, '').trim();
+      const summaryLine = cleanReply.split('\n')[0];
       return {
-        replyText: cleanReply || `I have analyzed your ${isPdf ? 'PDF document' : 'receipt photo'}! Review the proposed breakdown, multi-currency values, and individual percentages directly inside the verification window before saving right into our shared ledger.`,
+        replyText: summaryLine && summaryLine.length < 80 ? summaryLine : `⚖️ Proposed Ledger Split:`,
         draftExpense
       };
     } catch (err) {
@@ -132,13 +133,12 @@ Expected JSON schema right inside output:
     }
   }
 
-  // Fallback heuristic rule engine if offline
   const amountMatch = messageText.match(/\$?(\d+(\.\d{1,2})?)/);
   const fallbackAmount = amountMatch ? parseFloat(amountMatch[1]) : (imageUrl ? 45.00 : 0);
   
   if (fallbackAmount === 0 && !imageUrl) {
     return {
-      replyText: `Hi ${sender.name}! Tell me to log an expense (e.g. **"@Gemini Alice paid $60 for groceries split equally"**) or attach a picture/PDF document right using our bottom toolbar!`,
+      replyText: `Hi ${sender.name}! State an expense amount or tap 📷 / 📎 right below to extract a receipt.`,
       draftExpense: undefined
     };
   }

@@ -110,9 +110,10 @@ Expected JSON structure inside response:
           }
         }
 
-        const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
+        const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').replace(/\*\*/g, '').trim();
+        const firstLine = cleanReply.split('\n')[0];
         return NextResponse.json({
-          replyText: cleanReply || `🛍️ **@SHOPPY Discovery:** Here are top matching real-world options curated from our visual review below:`,
+          replyText: firstLine && firstLine.length < 80 ? firstLine : `🛍️ Curated Recommendations:`,
           structuredProducts: products
         }, { status: 200 });
       } catch (geminiErr: any) {
@@ -127,8 +128,8 @@ Expected JSON structure inside response:
         price: '$1,199',
         numericPrice: 1199,
         imageUrl: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=600&q=80',
-        rating: '⭐ 4.9 (420 reviews)',
-        vendor: 'West Elm / Wayfair',
+        rating: '4.9 (420 reviews)',
+        vendor: 'West Elm',
         externalUrl: 'https://www.google.com/search?q=West+Elm+Mid+Century+Solid+Wood+Platform+Bed',
         votes: []
       },
@@ -138,29 +139,18 @@ Expected JSON structure inside response:
         price: '$549',
         numericPrice: 549,
         imageUrl: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=600&q=80',
-        rating: '⭐ 4.8 (1,120 reviews)',
-        vendor: 'IKEA / Amazon',
+        rating: '4.8 (1,120 reviews)',
+        vendor: 'IKEA',
         externalUrl: 'https://www.google.com/search?q=IKEA+Nordli+Storage+Platform+Bed',
-        votes: []
-      },
-      {
-        id: 'opt-fallback-3',
-        title: 'Thuma The Bed Natural Walnut with Headboard',
-        price: '$995',
-        numericPrice: 995,
-        imageUrl: 'https://images.unsplash.com/photo-1540518614846-7ede433c13a0?auto=format&fit=crop&w=600&q=80',
-        rating: '⭐ 4.9 (810 reviews)',
-        vendor: 'Thuma / Pottery Barn',
-        externalUrl: 'https://www.google.com/search?q=Thuma+The+Bed+Walnut',
         votes: []
       }
     ];
 
     return NextResponse.json({
-      replyText: `🛍️ **@SHOPPY Discovery:** Here are three accurate platform options aligned with our specifications below for your team to review and vote on right away!`,
+      replyText: `🛍️ Curated Recommendations:`,
       structuredProducts: fallbackProducts
     }, { status: 200 });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to complete @SHOPPY discovery', details: error?.message }, { status: 500 });
+    return NextResponse.json({ error: 'Discovery failure', details: error?.message }, { status: 500 });
   }
 }

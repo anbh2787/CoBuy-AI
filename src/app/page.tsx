@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Group, User } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchUserPrivateGroups, createPrivateGroup, syncGoogleProfileToDatabase } from '@/lib/sync';
-import { PlusCircle, Share2, Users, Sparkles, LogIn, ShieldCheck, Camera, CreditCard, Lock, ArrowRight, Loader2, MessageSquare, Video, ShoppingBag, DollarSign, Check, ChevronRight } from 'lucide-react';
+import { Plus, Users, Sparkles, Camera, CreditCard, Lock, ArrowRight, Loader2, Video, ShoppingBag, X, ChevronRight } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function Home() {
 
   useEffect(() => {
     let isMounted = true;
-    const fallbackTimer = setTimeout(() => { if (isMounted) setIsLoadingAuth(false); }, 1800);
+    const fallbackTimer = setTimeout(() => { if (isMounted) setIsLoadingAuth(false); }, 1500);
 
     const initSession = async () => {
       setIsLoadingAuth(true);
@@ -78,172 +78,125 @@ export default function Home() {
         },
       });
     } catch (e) {
-      console.error('Google Sign-In action failed:', e);
+      console.error('Google Sign-In failed:', e);
     }
   };
 
   const handleCreateRoom = async (e?: React.FormEvent, presetTitle?: string, presetDesc?: string) => {
     if (e) e.preventDefault();
-    if (!activeUser || isCreating) return;
+    if (!activeUser) {
+      handleGoogleLogin();
+      return;
+    }
 
-    const finalTitle = presetTitle || newTitle || 'Google CoBuy Video & Shopping Room';
-    const finalDesc = presetDesc || newDesc || 'Shared real-time shopping review & instant splits';
+    const titleToUse = (presetTitle || newTitle || "CoBuy Room").trim();
+    const descToUse = (presetDesc || newDesc || "Shared collaborative group").trim();
 
     setIsCreating(true);
     try {
-      const g = await createPrivateGroup(finalTitle, finalDesc, activeUser);
-      if (g) {
-        setShowCreateModal(false);
-        setNewTitle('');
-        setNewDesc('');
-        router.push(`/group/${g.id}`);
+      const created = await createPrivateGroup(titleToUse, descToUse, activeUser);
+      if (created) {
+        router.push(`/group/${created.id}`);
       }
+    } catch (err) {
+      console.error('Create room error:', err);
     } finally {
       setIsCreating(false);
+      setShowCreateModal(false);
     }
   };
 
-  const handleJoinByCode = (e: React.FormEvent) => {
+  const handleJoinByCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = joinCodeInput.trim();
-    if (!cleaned) return;
-    router.push(`/join/${cleaned}`);
+    if (!joinCodeInput.trim()) return;
+    router.push(`/join/${joinCodeInput.trim()}`);
   };
 
   const presetWorkspaces = [
-    {
-      title: '💻 Tech & Gadget Hardware Hub',
-      desc: 'Point your camera at consumer tech across live video, review prices out loud, and split group costs.',
-      badgeColor: 'text-[#2B4C7E] bg-[#2B4C7E]/10 border-[#2B4C7E]/20',
-      icon: '💻'
-    },
-    {
-      title: '✈️ Stays & Group Travel Discovery',
-      desc: 'Ask @SHOPPY for multi-option Airbnb and flight decks inside interactive horizontal snap carousels.',
-      badgeColor: 'text-[#C45A45] bg-[#C45A45]/10 border-[#C45A45]/20',
-      icon: '✈️'
-    },
-    {
-      title: '🛍️ Live Mall Walkthrough & Fashion',
-      desc: 'Stream store aisles with friends on WebRTC video right while Gemini evaluates quality & sizing.',
-      badgeColor: 'text-[#D99B26] bg-[#D99B26]/10 border-[#D99B26]/20',
-      icon: '👗'
-    },
-    {
-      title: '🍷 Dinner Table & Receipt Reconciler',
-      desc: 'Snap itemized bills after dining. @SPLITTY extracts line items and computes minimum group debts.',
-      badgeColor: 'text-[#4A7C59] bg-[#4A7C59]/10 border-[#4A7C59]/20',
-      icon: '🧾'
-    },
+    { title: 'Tech & Gadget Hub', icon: '📱', color: 'bg-[#2B4C7E]/10 border-[#2B4C7E]/20' },
+    { title: 'Group Stays & Trips', icon: '🏖️', color: 'bg-[#4A7C59]/10 border-[#4A7C59]/20' },
+    { title: 'Live Fashion & Mall', icon: '🛍️', color: 'bg-[#D99B26]/10 border-[#D99B26]/20' },
+    { title: 'Dinner & Expense Tab', icon: '🍷', color: 'bg-[#C45A45]/10 border-[#C45A45]/20' }
   ];
 
   return (
-    <div className="min-h-screen bg-[#F9F7F1] text-[#22252A] flex flex-col pb-24">
+    <div className="min-h-screen bg-[#F9F7F1] text-[#22252A] flex flex-col pb-20">
       
-      {/* SECTION 1: WARM CREAM HERO SHOWCASE */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 w-full pt-10 sm:pt-16 flex flex-col items-center text-center">
+      {/* SECTION 1: HERO SHOWCASE (ZERO TEXT CLUTTER) */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 w-full pt-10 sm:pt-14 flex flex-col items-center text-center">
         
-        {/* Google AI & WebRTC Core Indicator Chip */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-amber-900/15 text-xs font-extrabold text-[#22252A] shadow-xs mb-6">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
-            <span className="w-2 h-2 rounded-full bg-[#EA4335]" />
-            <span className="w-2 h-2 rounded-full bg-[#FBBC05]" />
-            <span className="w-2 h-2 rounded-full bg-[#34A853]" />
-          </div>
-          <span className="font-black">Google CoBuy AI</span>
-          <span className="text-slate-400">•</span>
-          <span className="text-[#2B4C7E]">Real-Time Multimodal Video & Shopping Studio</span>
-        </div>
-
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-[#22252A] tracking-tight leading-none sm:leading-[1.1] max-w-5xl">
-          Shop Together across Video. <br className="hidden sm:block" />
-          <span className="text-[#2B4C7E]">
-            Consult with AI & Settle in Seconds.
-          </span>
+        <h1 className="text-4xl sm:text-6xl font-extrabold text-[#22252A] tracking-tight leading-tight">
+          Shop on Live Video. <br />
+          <span className="text-[#2B4C7E]">Consult AI. Split Instantly.</span>
         </h1>
 
-        <p className="text-sm sm:text-lg text-slate-600 max-w-3xl mt-5 font-medium leading-relaxed">
-          Say goodbye to disjointed shopping links right scattered inside chat apps. Launch an interactive WebRTC video space where your autonomous twin-AI copilot evaluates store items out loud across your camera right (`Option A Touch & Speak`), curates horizontal consensus carousels across chat right right right upon ending your call (`@SHOPPY`), right alongside reconciling group bills automatically (`@SPLITTY`).
-        </p>
-
-        {/* MILD WHITE GEOMETRIC ROOM CREATION CARD */}
-        <div className="mt-8 sm:mt-12 w-full max-w-xl bg-white border border-amber-900/15 rounded-[32px] p-4 sm:p-6 shadow-md">
+        {/* COMPACT DASHBOARD CARD */}
+        <div className="mt-8 w-full max-w-md bg-white border border-amber-900/15 rounded-[28px] p-5 shadow-sm">
           {isLoadingAuth ? (
-            <div className="flex flex-col items-center justify-center py-6 gap-2 text-slate-500">
-              <Loader2 className="w-8 h-8 animate-spin text-[#2B4C7E]" />
-              <span className="text-xs font-bold">Connecting Google Wallet & Profile...</span>
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-[#2B4C7E]" />
             </div>
           ) : activeUser ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               <button
                 onClick={() => setShowCreateModal(true)}
                 disabled={isCreating}
-                className="w-full py-4 px-6 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-black text-base transition shadow-md flex items-center justify-center gap-2.5 active:scale-95"
+                className="w-full py-3.5 px-5 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold text-sm transition shadow-sm flex items-center justify-center gap-2 active:scale-95"
               >
-                {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-6 h-6 text-white" />}
-                <span>Create Live Video & Shopping Room</span>
+                {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-5 h-5" />}
+                <span>New CoBuy Room</span>
               </button>
 
-              <form onSubmit={handleJoinByCode} className="flex gap-2">
+              <form onSubmit={handleJoinByCode} className="flex gap-2 pt-1">
                 <input
                   type="text"
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value)}
-                  placeholder="Paste room invitation code..."
-                  className="flex-1 bg-[#F9F7F1] border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition"
+                  placeholder="Invite code..."
+                  className="flex-1 bg-[#F9F7F1] border border-amber-900/15 rounded-xl px-3.5 py-2.5 text-xs text-[#22252A] placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition"
                 />
                 <button
                   type="submit"
-                  className="px-5 rounded-2xl bg-white hover:bg-slate-50 border border-amber-900/15 font-bold text-[#22252A] text-sm transition active:scale-95 flex items-center gap-1 shadow-xs"
+                  className="px-4 rounded-xl bg-white hover:bg-slate-50 border border-amber-900/15 font-bold text-xs text-[#22252A] transition active:scale-95 flex items-center gap-1 shadow-xs"
                 >
                   <span>Join</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </form>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4 py-3">
-              <p className="text-xs text-slate-600 font-medium">
-                Sign directly using your Google Account to host shared live video studios & interactive shopping carousels.
-              </p>
+            <div className="flex flex-col items-center gap-4 py-2">
               <button
                 onClick={handleGoogleLogin}
-                className="w-full py-4 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-black text-base transition shadow-md flex items-center justify-center gap-3 active:scale-95"
+                className="bg-white hover:bg-slate-50 text-slate-700 font-semibold px-6 py-3 rounded-full border border-slate-300 shadow-sm flex items-center gap-3 text-sm transition active:scale-95 w-full justify-center"
               >
-                <div className="flex gap-1 items-center">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#4285F4]" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#EA4335]" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#FBBC05]" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#34A853]" />
-                </div>
-                <span>Continue with Google</span>
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign in with Google</span>
               </button>
             </div>
           )}
         </div>
       </main>
 
-      {/* SECTION 2: INSTANT GOOGLE COBUY WORKSPACE PRESETS (`Click-to-Launch`) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 w-full mt-14 sm:mt-18">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-[#22252A] tracking-tight flex items-center gap-2">
-              <span className="w-2.5 h-6 rounded-full bg-[#2B4C7E]" />
-              Quick-Launch Collaborative Rooms
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-              Select any verified template right below to instantly open a multi-person video studio & group chat room.
-            </p>
-          </div>
+      {/* SECTION 2: INSTANT TEMPLATES */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 w-full mt-12">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-extrabold text-[#22252A] uppercase tracking-wider flex items-center gap-2">
+            ⚡ Quick Launch Rooms
+          </h2>
           {activeUser && privateGroups.length > 0 && (
-            <span className="text-xs font-bold text-slate-700 border border-amber-900/15 rounded-xl px-3 py-1 bg-white shadow-xs">
-              {privateGroups.length} Active Workspaces Open
+            <span className="text-xs font-bold text-[#2B4C7E]">
+              {privateGroups.length} open
             </span>
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {presetWorkspaces.map((preset, i) => (
             <button
               key={i}
@@ -252,234 +205,107 @@ export default function Home() {
                 if (!activeUser) {
                   handleGoogleLogin();
                 } else {
-                  handleCreateRoom(undefined, preset.title, preset.desc);
+                  handleCreateRoom(undefined, preset.title, "Shared room");
                 }
               }}
-              className="bg-white hover:bg-white/95 border border-amber-900/10 rounded-[28px] p-5 text-left transition duration-200 hover:shadow-md flex flex-col justify-between shadow-sm active:scale-95 group"
+              className={`p-4 rounded-2xl border bg-white hover:bg-slate-50 transition text-left shadow-xs flex flex-col justify-between gap-3 active:scale-95`}
             >
-              <div>
-                <span className="text-3xl mb-3 block">{preset.icon}</span>
-                <span className={`inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-md mb-2 border ${preset.badgeColor}`}>
-                  Google Template
-                </span>
-                <h3 className="font-extrabold text-[#22252A] text-base tracking-tight mb-1.5 group-hover:text-[#2B4C7E] transition">
-                  {preset.title}
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                  {preset.desc}
-                </p>
-              </div>
-              <div className="mt-5 pt-3 border-t border-amber-900/10 flex items-center justify-between text-xs font-black text-[#2B4C7E]">
-                <span>Deploy Room</span>
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-              </div>
+              <span className="text-2xl">{preset.icon}</span>
+              <span className="font-bold text-xs text-[#22252A] leading-tight truncate">
+                {preset.title}
+              </span>
             </button>
           ))}
         </div>
       </section>
 
-      {/* SECTION 3: THREE PILLARS OF GOOGLE COBUY AI */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 w-full mt-16 sm:mt-24">
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-amber-900/10 text-[#2B4C7E] text-xs font-bold uppercase tracking-widest mb-2 shadow-xs">
-            <Sparkles className="w-3.5 h-3.5 text-[#D99B26]" /> Powered by Gemini Multimodal & Lens Core
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#22252A] tracking-tight">
-            One Studio. Three Autonomous AI Co-Pilots.
-          </h2>
-          <p className="text-sm text-slate-600 mt-2 font-medium">
-            Bridging real-time physical video inspection, group consensus buying decks, and automated bill reconciliation.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* PILLAR 1: LIVE VIDEO CONSULTATION & AUDIO */}
-          <div className="bg-white border border-amber-900/10 rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-[#2B4C7E]/10 border border-[#2B4C7E]/20 flex items-center justify-center mb-5 text-[#2B4C7E]">
-                <Video className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-black text-[#22252A] mb-2">
-                1. Gemini Live Video Studio
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Hop on multi-person HD video. Point your smartphone directly at physical merchandise or retail displays. Tap our circular **`✨`** button right right across your bar and ask: *"Gemini, look at this package out loud—does it match our group requirements?"* right inside the call!
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-amber-900/10 flex items-center gap-2 text-xs font-bold text-[#2B4C7E]">
-              <Check className="w-4 h-4" /> Option A Touch & Talk + Factual Grounding
-            </div>
-          </div>
-
-          {/* PILLAR 2: @SHOPPY INTERACTIVE DISCOVERY DECKS */}
-          <div className="bg-white border border-amber-900/10 rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-[#C45A45]/10 border border-[#C45A45]/20 flex items-center justify-center mb-5 text-[#C45A45]">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-black text-[#22252A] mb-2">
-                2. @SHOPPY Buying Carousels
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Whenever you finish evaluating items across video, or right when you mention `@SHOPPY` directly right in chat (`"@SHOPPY compare top gaming monitors under $400"`), our engine populates horizontal snap decks complete right with **`❤️ Vote`**, **`🔍 Discuss`**, right right alongside **`🔗 Checkout Link`** actions!
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-amber-900/10 flex items-center gap-2 text-xs font-bold text-[#C45A45]">
-              <Check className="w-4 h-4" /> Auto-Generated directly after camera sessions
-            </div>
-          </div>
-
-          {/* PILLAR 3: @SPLITTY OPTICAL RECEIPT RECONCILER */}
-          <div className="bg-white border border-amber-900/10 rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-[#4A7C59]/10 border border-[#4A7C59]/20 flex items-center justify-center mb-5 text-[#4A7C59]">
-                <DollarSign className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-black text-[#22252A] mb-2">
-                3. @SPLITTY Neural Ledgers
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                When checking out together, snap a picture right of the receipt right right across your device. `@SPLITTY` extracts individual item prices via high-precision optical AI, normalizes currency exchange rates (`JPY to USD`), and calculates exact min-cash-flow settling tables.
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-amber-900/10 flex items-center gap-2 text-xs font-bold text-[#4A7C59]">
-              <Check className="w-4 h-4" /> Min-Cash-Flow Settle Board & Deep Links
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 4: USER ACTIVE WORKSPACES LIST */}
+      {/* SECTION 3: YOUR ACTIVE ROOMS */}
       {activeUser && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 w-full mt-16">
-          <div className="bg-white border border-amber-900/10 rounded-[32px] p-6 sm:p-8 shadow-sm">
-            <div className="flex items-center justify-between border-b border-amber-900/10 pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <img src={activeUser.avatar} alt="Avatar" className="w-10 h-10 rounded-full border border-amber-900/15 object-cover" />
-                <div>
-                  <h3 className="font-extrabold text-[#22252A] text-lg tracking-tight">
-                    Your Collaborative Rooms
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Signed in as {activeUser.name} ({activeUser.email})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition shadow-sm"
-              >
-                <PlusCircle className="w-4 h-4 text-white" /> Create Custom Space
-              </button>
-            </div>
+        <section className="max-w-5xl mx-auto px-4 sm:px-6 w-full mt-10">
+          <h2 className="text-sm font-extrabold text-[#22252A] uppercase tracking-wider mb-3">
+            📂 Your Workspaces
+          </h2>
 
-            {loadingGroups ? (
-              <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-500">
-                <Loader2 className="w-8 h-8 animate-spin text-[#2B4C7E]" />
-                <span className="text-xs font-bold">Loading your active Google CoBuy studios...</span>
-              </div>
-            ) : privateGroups.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 max-w-sm mx-auto">
-                <Users className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <p className="text-sm font-bold text-[#22252A]">No active collaborative rooms found.</p>
-                <p className="text-xs text-slate-500 mt-1">Select any preset right above or click below to launch your first room!</p>
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="mt-5 py-3 px-6 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] font-bold text-white text-xs sm:text-sm transition shadow-md"
+          {loadingGroups ? (
+            <div className="py-6 flex justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-[#2B4C7E]" />
+            </div>
+          ) : privateGroups.length === 0 ? (
+            <div className="bg-white border border-amber-900/10 rounded-2xl p-6 text-center text-xs font-bold text-slate-400">
+              No active spaces yet. Tap "New CoBuy Room" above to begin.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {privateGroups.map(room => (
+                <Link
+                  key={room.id}
+                  href={`/group/${room.id}`}
+                  className="bg-white hover:bg-[#F4F1EA] border border-amber-900/15 rounded-2xl p-4 flex items-center justify-between transition shadow-xs group"
                 >
-                  Create Initial Workspace
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {privateGroups.map(room => (
-                  <Link
-                    key={room.id}
-                    href={`/group/${room.id}`}
-                    className="bg-[#F9F7F1] hover:bg-[#F4F1EA] border border-amber-900/10 rounded-2xl p-5 transition flex flex-col justify-between group shadow-xs"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[11px] font-mono text-slate-600 bg-white px-2 py-0.5 rounded-lg border border-amber-900/10 shadow-xs">
-                          Code: {room.inviteCode || room.id.slice(0, 8)}
-                        </span>
-                        <span className="flex items-center gap-1 text-[11px] text-[#4A7C59] font-extrabold">
-                          <span className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" /> Active Studio
-                        </span>
-                      </div>
-                      <h4 className="font-extrabold text-[#22252A] text-base tracking-tight group-hover:text-[#2B4C7E] transition truncate">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#2B4C7E] text-white flex items-center justify-center font-bold text-base shrink-0">
+                      {room.title.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm text-[#22252A] truncate">
                         {room.title}
                       </h4>
-                      <p className="text-xs text-slate-600 mt-1 line-clamp-2">
-                        {room.description || 'Collaborative shopping space & video room.'}
+                      <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
+                        <Users className="w-3 h-3 text-[#2B4C7E]" /> {room.members.length} members
                       </p>
                     </div>
-                    <div className="mt-5 pt-3 border-t border-amber-900/10 flex items-center justify-between text-xs font-bold text-[#2B4C7E]">
-                      <span>Open Video & AI Studio</span>
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition shrink-0" />
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
-      {/* CREATE CUSTOM ROOM MODAL */}
+      {/* CREATE ROOM MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[160] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-[#F9F7F1] border border-amber-900/10 rounded-[32px] w-full max-w-md p-6 sm:p-8 text-[#22252A] shadow-2xl relative my-auto shrink-0">
-            <h3 className="text-2xl font-black text-[#22252A] tracking-tight flex items-center gap-2">
-              <span className="w-2.5 h-6 bg-[#2B4C7E] rounded-full" /> Create Shopping Space
-            </h3>
-            <p className="text-xs text-slate-600 mt-1">
-              Give your room a descriptive name (*e.g. Tokyo Group Vacation* or *VR Setup Split*).
-            </p>
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-amber-900/15 rounded-[28px] w-full max-w-sm p-6 shadow-xl text-[#22252A] relative">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
 
-            <form onSubmit={(e) => handleCreateRoom(e)} className="mt-6 space-y-4">
+            <h3 className="text-base font-extrabold flex items-center gap-2 mb-4">
+              ✨ New CoBuy Workspace
+            </h3>
+
+            <form onSubmit={(e) => handleCreateRoom(e)} className="space-y-4">
               <div>
-                <label className="text-xs font-extrabold text-[#22252A] block mb-1.5">
-                  Room Title:
-                </label>
+                <label className="text-xs font-bold text-[#22252A] block mb-1">Room Title:</label>
                 <input
                   type="text"
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Pixel 9 Pro & Gadget Haul"
-                  className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition shadow-xs"
+                  placeholder="e.g. Living Room Furniture"
+                  className="w-full bg-slate-50 border border-amber-900/15 rounded-xl px-3 py-2.5 text-sm text-[#22252A] font-medium focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-extrabold text-[#22252A] block mb-1.5">
-                  Target or Purpose:
-                </label>
-                <input
-                  type="text"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="e.g. Compare store gear over live camera"
-                  className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition shadow-xs"
-                />
-              </div>
-
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-amber-900/10">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 transition"
+                  className="px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isCreating}
-                  className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-black px-6 py-3 rounded-2xl transition shadow-md text-sm flex items-center gap-2 active:scale-95"
+                  className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold px-5 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5"
                 >
-                  {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Launch Studio</span>}
+                  {isCreating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Create</span>
                 </button>
               </div>
             </form>

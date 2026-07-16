@@ -259,7 +259,7 @@ export default function GroupChatRoom({ params }: PageProps) {
   const handleCloseVideoCallWithNotes = async (sessionNotes?: string[], lastImageBase64?: string) => {
     setIsVideoCallOpen(false);
     if (sessionNotes && sessionNotes.length > 0 && group && currentUser) {
-      const summaryText = `📝 Post-Call AI Video Observations:\nDuring our meeting, Gemini Live evaluated our live stream and noted:\n\n${sessionNotes.map(note => `• ${note}`).join('\n\n')}`;
+      const summaryText = `${sessionNotes.map(n => n.replace(/^📸 AI Video Observation: /, '📸 ')).join('\n')}`;
       
       const summaryMsg: Message = {
         id: 'postcall-' + Date.now(),
@@ -284,13 +284,13 @@ export default function GroupChatRoom({ params }: PageProps) {
           is_ai_response: true
         });
       } catch (err) {
-        console.warn('Note persistence check note:', err);
+        console.warn('Note check note:', err);
       }
 
       // AUTOMATIC @SHOPPY POST-CALL BUYING CAROUSEL GENERATOR WITH IMAGE GROUNDING
       try {
         const observedItems = sessionNotes.join('. ');
-        const shoppyPrompt = `Based on these items discovered during our live video evaluation (${observedItems}), find identical or highly similar products complete right with prices right and checkout links in our interactive deck!`;
+        const shoppyPrompt = `Curate matching products from camera scan: (${observedItems})`;
         
         const shoppyRes = await fetch('/api/shoppy', {
           method: 'POST',
@@ -305,7 +305,7 @@ export default function GroupChatRoom({ params }: PageProps) {
 
         const shoppyData = await shoppyRes.json();
         if (shoppyData.structuredProducts && shoppyData.structuredProducts.length > 0) {
-          const shoppyContent = `🛍️ @SHOPPY Post-Call Recommendations:\nBased on what our group just inspected across video together, here are matching buying choices with one-click consensus voting and verified checkouts right below!`;
+          const shoppyContent = `🛍️ Curated Matches from Live Video:`;
           const shoppyMsg: Message = {
             id: 'post-shoppy-' + Date.now(),
             groupId: group.id,
@@ -330,7 +330,7 @@ export default function GroupChatRoom({ params }: PageProps) {
           });
         }
       } catch (shoppyErr) {
-        console.warn('Post-call shoppy check note:', shoppyErr);
+        console.warn('Shoppy check note:', shoppyErr);
       }
     }
   };
@@ -810,31 +810,23 @@ export default function GroupChatRoom({ params }: PageProps) {
           </div>
         </div>
 
-        {/* PROMINENT CENTRAL LIVE VIDEO STUDIO HERO CARD (KEY ELEMENT AMONG PARTICIPANTS) */}
-        <div className="p-3.5 sm:px-6 pt-3.5 shrink-0 bg-[#F4F1EA]">
-          <div className="bg-white border border-amber-900/15 rounded-[28px] p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-[#4285F4] via-[#EA4335] to-[#34A853]" />
-            <div className="pl-2 sm:pl-3 flex flex-col gap-1 text-left w-full sm:w-auto">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase text-[#2B4C7E] tracking-wider flex items-center gap-1.5">
-                  🎥 Live Collaborative Video Studio
-                </span>
-                <span className="text-[11px] font-bold bg-[#4A7C59]/15 text-[#4A7C59] px-2 py-0.5 rounded-lg border border-[#4A7C59]/25">
-                  Option A Voice Engine
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 font-medium max-w-xl leading-relaxed">
-                Stream store displays, physical items, or digital checkouts out loud with your group. Tap our circular **`✨`** command icon during the call to ask Gemini direct conversational questions out loud, and receive matching `@SHOPPY` buying decks upon ending the meeting!
-              </p>
+        {/* ULTRA-COMPACT 1-LINE STUDIO BAR (ZERO PARAGRAPHS) */}
+        <div className="px-3.5 sm:px-6 py-2 shrink-0 bg-[#F4F1EA]">
+          <div className="bg-white border border-amber-900/10 rounded-2xl p-2 sm:px-4 shadow-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-lg shrink-0">🎥</span>
+              <span className="text-xs font-bold text-[#2B4C7E] uppercase tracking-wide truncate">
+                Live CoBuy Video Studio
+              </span>
             </div>
 
             <button
               type="button"
               onClick={handleStartOrJoinVideoCall}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md transition shrink-0 active:scale-95 group"
+              className="px-4 py-2 rounded-xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold text-xs flex items-center gap-2 shadow-xs transition shrink-0 active:scale-95"
             >
-              <Video className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
-              <span>Enter Live Video Studio &rarr;</span>
+              <Video className="w-4 h-4 text-amber-300" />
+              <span>Join Studio</span>
             </button>
           </div>
         </div>
@@ -976,19 +968,19 @@ export default function GroupChatRoom({ params }: PageProps) {
         <div className="bg-[#F9F7F1] border-t border-amber-900/10 p-2.5 sm:p-3.5 shrink-0 z-30">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2 max-w-5xl mx-auto">
             
-            {/* QUICK VIDEO & SCAN CHIP */}
+            {/* QUICK VIDEO CHIP */}
             <button
               type="button"
               onClick={handleStartOrJoinVideoCall}
-              className="px-3.5 py-3 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-extrabold text-xs transition shadow-xs flex items-center gap-1.5 shrink-0 active:scale-95"
-              title="Hop on Live Video & AI Studio right now"
+              className="p-3 sm:px-3.5 sm:py-3 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold text-xs transition shadow-xs flex items-center gap-1.5 shrink-0 active:scale-95"
+              title="Join Video Studio"
             >
               <Video className="w-4 h-4 text-amber-300" />
-              <span className="hidden sm:inline">Hop on Video</span>
+              <span className="hidden sm:inline">Studio</span>
             </button>
 
             <label
-              title="Snap instant smartphone camera photo"
+              title="Camera capture"
               className="p-3 rounded-2xl bg-white hover:bg-[#F4F1EA] text-[#C45A45] transition border border-amber-900/15 cursor-pointer flex items-center justify-center shrink-0 shadow-xs active:scale-95"
             >
               <Camera className="w-5 h-5" />
@@ -1003,7 +995,7 @@ export default function GroupChatRoom({ params }: PageProps) {
             </label>
 
             <label
-              title="Upload existing picture or PDF document"
+              title="Upload file"
               className="p-3 rounded-2xl bg-white hover:bg-[#F4F1EA] text-[#22252A] transition border border-amber-900/15 cursor-pointer flex items-center justify-center shrink-0 shadow-xs active:scale-95"
             >
               <Paperclip className="w-5 h-5 text-slate-600" />
@@ -1023,7 +1015,7 @@ export default function GroupChatRoom({ params }: PageProps) {
                 value={messageInput}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder='Type "@SHOPPY compare..." or "@SPLITTY split..." or hop right inside video...'
+                placeholder="Message room..."
                 className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition font-sans shadow-xs"
               />
             </div>

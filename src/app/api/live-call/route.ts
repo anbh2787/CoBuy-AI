@@ -47,10 +47,10 @@ Analyze the literal physical pixels across the provided photo above.
 ${audioBase64 ? "Listen carefully to the user's attached spoken voice recording along with the picture." : `User asks verbally: "${questionText || "Describe what physical object across this picture looks like out loud."}"`}
 
 Strict conversational rules for spoken voice delivery:
-1. FIRST listen right to and directly answer what the user is asking across their voice command! If the user asks whether a piece of furniture or bed is good quality, or what it costs, immediately provide your direct conversational evaluation out loud rather than merely listing static room items.
-2. ZERO-BIAS FACTUAL GROUNDING: Base all product identification directly on literal items observable across this exact photo. Never invent external train tickets or fictitious items not shown on screen.
-3. Keep your spoken audio reply natural, friendly, and concise (around 2 clear conversational sentences) completely suitable right for out-loud delivery across speakers.
-4. Do not include raw markdown symbols or repetitive filler words across your response text.
+1. FIRST listen directly to and answer what the user is asking out loud! If asking about furniture quality or typical price, deliver your direct conversational estimate out loud.
+2. ZERO-BIAS FACTUAL GROUNDING: Base all evaluation strictly on physical items visible inside this picture.
+3. EXTREME BREVITY RULE: Keep your spoken answer short, punchy, and concise—exactly 1 short conversational sentence (under 20 words max). Never read long lists or long paragraphs out loud.
+4. Do not include raw markdown asterisks across your response text.
 `;
         parts.push(prompt);
 

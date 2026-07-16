@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { syncGoogleProfileToDatabase, updatePaymentHandles } from '@/lib/sync';
 import { User } from '@/lib/types';
-import { Sparkles, CreditCard, LogIn, LogOut, CheckCircle, X, Shield } from 'lucide-react';
+import { Sparkles, CreditCard, LogOut, CheckCircle, X } from 'lucide-react';
 
 export default function Navbar() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -71,153 +71,133 @@ export default function Navbar() {
     setTimeout(() => {
       setSavedSuccess(false);
       setShowPaymentModal(false);
-    }, 1200);
+    }, 1000);
   };
 
   return (
     <>
-      {/* WARM CREAM NAVIGATION BAR (`bg-[#F9F7F1]` with soft elevated border) */}
       <header className="bg-[#F9F7F1]/95 border-b border-amber-900/10 sticky top-0 z-40 backdrop-blur-md h-16 flex items-center shadow-sm">
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 flex items-center justify-between">
           
-          <Link href="/" className="flex items-center gap-2.5 group transition">
-            <div className="relative p-2 rounded-2xl bg-white border border-amber-900/10 shadow-sm group-hover:scale-105 transition flex items-center justify-center">
+          <Link href="/" className="flex items-center gap-2 group transition">
+            <div className="p-2 rounded-xl bg-white border border-amber-900/10 shadow-xs flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-[#D99B26]" />
             </div>
-            
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-[#22252A] text-lg tracking-tight">
-                Google <span className="text-[#2B4C7E]">CoBuy AI</span>
-              </span>
-            </div>
-
-            <span className="hidden xl:flex items-center gap-1.5 text-[11px] font-bold text-[#4A7C59] bg-white border border-[#4A7C59]/20 rounded-xl px-2.5 py-0.5 ml-2 shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4A7C59] animate-pulse" /> Collaborative Video & Vision
+            <span className="font-extrabold text-[#22252A] text-lg tracking-tight">
+              Google <span className="text-[#2B4C7E]">CoBuy AI</span>
             </span>
           </Link>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-3">
             {currentUser ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   onClick={() => setShowPaymentModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-900/10 hover:bg-[#F4F1EA] transition text-[#22252A] text-xs font-bold shadow-xs"
-                  title="Configure instant receiving UPI, Google Pay & Venmo payment links"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-amber-900/15 hover:bg-[#F4F1EA] transition text-[#22252A] text-xs font-bold shadow-xs active:scale-95"
+                  title="Configure Payment IDs"
                 >
                   <CreditCard className="w-3.5 h-3.5 text-[#2B4C7E]" />
-                  <span className="hidden md:inline">Google Pay & Links</span>
+                  <span>Pay IDs</span>
                 </button>
 
                 <div className="flex items-center gap-2 pl-2 border-l border-amber-900/10">
                   <img
                     src={currentUser.avatar}
                     alt={currentUser.name}
-                    className="w-8 h-8 rounded-full border border-amber-900/10 shrink-0 object-cover shadow-xs"
+                    className="w-8 h-8 rounded-full border border-amber-900/15 shrink-0 object-cover shadow-xs"
                   />
-                  <span className="font-extrabold text-[#22252A] text-xs hidden lg:inline max-w-[140px] truncate">
+                  <span className="font-bold text-[#22252A] text-xs hidden sm:inline max-w-[120px] truncate">
                     {currentUser.name}
                   </span>
                 </div>
 
                 <button
                   onClick={handleGoogleLogout}
-                  className="text-slate-500 hover:text-[#C45A45] transition p-1.5 rounded-xl hover:bg-[#C45A45]/10"
-                  title="Sign out from Google"
+                  className="text-slate-500 hover:text-[#C45A45] p-2 rounded-full transition hover:bg-slate-100"
+                  title="Sign out"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
+              /* OFFICIAL UNIVERSAL SIGN IN WITH GOOGLE BUTTON */
               <button
                 onClick={handleGoogleLogin}
-                className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-black px-4.5 py-2 rounded-2xl text-xs sm:text-sm transition shadow-sm flex items-center gap-2 group active:scale-95"
+                className="bg-white hover:bg-slate-50 text-slate-700 font-semibold px-4 py-2 rounded-full border border-slate-300 shadow-sm flex items-center gap-2.5 text-xs sm:text-sm transition active:scale-95"
               >
-                <div className="flex gap-1 items-center">
-                  <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
-                  <span className="w-2 h-2 rounded-full bg-[#EA4335]" />
-                  <span className="w-2 h-2 rounded-full bg-[#FBBC05]" />
-                  <span className="w-2 h-2 rounded-full bg-[#34A853]" />
-                </div>
-                <span>Sign directly with Google</span>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign in with Google</span>
               </button>
             )}
           </div>
         </div>
       </header>
       
-      {/* RECEIVER VERIFICATION PAYMENT LINKS MODAL (`Mild editorial white container right across warm modal backdrop`) */}
       {showPaymentModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-[#F9F7F1] border border-amber-900/10 rounded-[28px] w-full max-w-md p-6 sm:p-7 text-[#22252A] shadow-2xl relative my-auto shrink-0">
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-amber-900/15 rounded-[28px] w-full max-w-sm p-6 text-[#22252A] shadow-xl relative my-auto">
             <button
               onClick={() => setShowPaymentModal(false)}
-              className="absolute right-5 top-5 text-slate-500 hover:text-slate-900 p-1.5 rounded-xl hover:bg-black/5 transition"
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 rounded-full transition"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-1.5 text-[#2B4C7E] text-xs font-extrabold uppercase tracking-widest mb-1.5">
-              <Shield className="w-4 h-4" /> Google Wallet & Receiver Setup
-            </div>
-            <h3 className="text-2xl font-black flex items-center gap-2 tracking-tight">
-              Payment & UPI Link Profiles
+            <h3 className="text-lg font-extrabold flex items-center gap-2 mb-4">
+              💳 Payment IDs
             </h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Set up your personal receiving IDs. When someone taps "Settle" inside any collaborative table, our system triggers native deep links straight to Google Pay, Paytm, or PayPal!
-            </p>
 
-            <form onSubmit={handleSaveHandles} className="mt-6 space-y-4">
+            <form onSubmit={handleSaveHandles} className="space-y-4">
               <div>
-                <label className="text-xs font-extrabold text-[#22252A] block mb-1.5">
-                  UPI Virtual ID (India / Google Pay):
+                <label className="text-xs font-bold text-[#22252A] block mb-1">
+                  UPI Virtual ID (Google Pay / India):
                 </label>
                 <input
                   type="text"
                   value={upi}
                   onChange={(e) => setUpi(e.target.value)}
-                  placeholder="e.g. anujbhagat@okaxis or phone@paytm"
-                  className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition shadow-xs"
+                  placeholder="anujbhagat@okaxis"
+                  className="w-full bg-slate-50 border border-amber-900/15 rounded-xl px-3 py-2 text-sm text-[#22252A] font-medium focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Generates direct payment links (`upi://pay?pa=...`) for Google Pay and PhonePe.
-                </p>
               </div>
 
               <div>
-                <label className="text-xs font-extrabold text-[#22252A] block mb-1.5">
-                  Venmo Handle / PayPal (US & Global):
+                <label className="text-xs font-bold text-[#22252A] block mb-1">
+                  Venmo / PayPal Handle (US & Global):
                 </label>
                 <input
                   type="text"
                   value={venmo}
                   onChange={(e) => setVenmo(e.target.value)}
-                  placeholder="e.g. @anuj-bhagat or paypal.me/anuj"
-                  className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition shadow-xs"
+                  placeholder="@anuj-bhagat"
+                  className="w-full bg-slate-50 border border-amber-900/15 rounded-xl px-3 py-2 text-sm text-[#22252A] font-medium focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Connects cross-border checkout triggers.
-                </p>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-amber-900/10">
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 transition"
+                  className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savedSuccess}
-                  className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-black px-6 py-3 rounded-2xl transition shadow-md text-sm flex items-center gap-2 active:scale-95"
+                  className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-bold px-5 py-2 rounded-xl text-xs transition flex items-center gap-1.5"
                 >
                   {savedSuccess ? (
                     <>
-                      <CheckCircle className="w-4 h-4" /> Profile Saved!
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-300" /> Saved
                     </>
                   ) : (
-                    "Save Payment Links"
+                    "Save"
                   )}
                 </button>
               </div>
