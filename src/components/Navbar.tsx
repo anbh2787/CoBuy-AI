@@ -52,7 +52,7 @@ export default function Navbar() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.href,
+      redirectTo: window.location.href,
       },
     });
   };
@@ -76,14 +76,24 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="bg-slate-950/95 border-b border-slate-800 sticky top-0 z-40 backdrop-blur-md h-16 flex items-center shadow-md">
+      <header className="bg-slate-950/95 border-b border-slate-800/80 sticky top-0 z-40 backdrop-blur-md h-16 flex items-center shadow-lg">
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group transition">
-            <div className="bg-gradient-to-tr from-brand-600 to-purple-600 p-2 rounded-xl group-hover:scale-105 transition shadow-md">
-              <Sparkles className="w-5 h-5 text-white" />
+          
+          <Link href="/" className="flex items-center gap-2.5 group transition">
+            {/* OFFICIAL GOOGLE 4-COLOR AI SPARKLE BADGE */}
+            <div className="relative p-2 rounded-2xl bg-slate-900 border border-slate-700/80 group-hover:scale-105 transition shadow-md flex items-center justify-center overflow-hidden">
+              <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#34A853]" />
+              <Sparkles className="w-5 h-5 text-amber-400 z-10" />
             </div>
-            <span className="font-black text-white text-lg tracking-tight hidden xs:inline sm:text-xl">
-              CoBuy AI
+            
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-white text-lg tracking-tight">
+                Google <span className="bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#34A853] bg-clip-text text-transparent">CoBuy AI</span>
+              </span>
+            </div>
+
+            <span className="hidden xl:flex items-center gap-1 text-[11px] font-mono text-slate-400 border border-slate-800 rounded-xl px-2.5 py-0.5 ml-2">
+              ✨ Gemini Live & Google Meet Core
             </span>
           </Link>
 
@@ -92,14 +102,14 @@ export default function Navbar() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setShowPaymentModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 hover:bg-slate-800 transition text-slate-300 text-xs font-bold"
-                  title="Configure instant receiving UPI, Paytm & Venmo payment links"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 transition text-slate-300 text-xs font-bold"
+                  title="Configure instant receiving UPI, Google Pay & Venmo payment links"
                 >
-                  <CreditCard className="w-3.5 h-3.5 text-brand-400" />
-                  <span className="hidden md:inline">Payment Links</span>
+                  <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden md:inline">Google Pay & Links</span>
                 </button>
 
-                <div className="flex items-center gap-2 pl-1 border-l border-slate-800">
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
                   <img
                     src={currentUser.avatar}
                     alt={currentUser.name}
@@ -121,66 +131,72 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={handleGoogleLogin}
-                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black px-4.5 py-2 rounded-2xl text-xs sm:text-sm transition shadow-lg flex items-center gap-2"
+                className="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-black px-4 py-2 rounded-2xl text-xs sm:text-sm transition shadow-lg flex items-center gap-2 group active:scale-95"
               >
-                <LogIn className="w-4 h-4 text-slate-950" /> Continue with Google
+                <div className="flex gap-0.5 items-center">
+                  <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
+                  <span className="w-2 h-2 rounded-full bg-[#EA4335]" />
+                  <span className="w-2 h-2 rounded-full bg-[#FBBC05]" />
+                  <span className="w-2 h-2 rounded-full bg-[#34A853]" />
+                </div>
+                <span>Continue with Google</span>
               </button>
             )}
           </div>
         </div>
       </header>
-
-      {/* SETUP UPI/VENMO HANDLES POPUP - COMPLETELY CENTERED DIRECTLY RIGHT ON EVERY MOBILE & DESKTOP SCREEN */}
+      
+      {/* GOOGLE MATERIAL YOU VERIFICATION MODAL (`Payment Links Setup`) */}
       {showPaymentModal && (
-        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md p-6 text-white shadow-2xl relative my-auto shrink-0">
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-[#202124] border border-slate-700/80 rounded-[28px] w-full max-w-md p-6 sm:p-7 text-white shadow-2xl relative my-auto shrink-0">
             <button
               onClick={() => setShowPaymentModal(false)}
-              className="absolute right-5 top-5 text-slate-400 hover:text-white p-1.5 rounded-lg transition"
+              className="absolute right-5 top-5 text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2 text-brand-400 text-xs font-extrabold uppercase tracking-widest mb-1">
-              <Shield className="w-4 h-4" /> Receiver Verification
+            <div className="flex items-center gap-2 text-blue-400 text-xs font-extrabold uppercase tracking-widest mb-1.5">
+              <Shield className="w-4 h-4" /> Google Wallet & Receiver Verification
             </div>
             <h3 className="text-2xl font-black flex items-center gap-2 tracking-tight">
-              Setup UPI & Venmo Links
+              Payment & UPI Link Profiles
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Configure your exact receiving IDs. When someone taps "Settle" inside the financial summary table, our application triggers deep mobile links straight right onto their phone apps!
+              Set up your personal receiving IDs. When someone taps "Settle" inside any group table, our system opens native deep links directly to Google Pay, Paytm, or PayPal!
             </p>
 
             <form onSubmit={handleSaveHandles} className="mt-6 space-y-4">
               <div>
                 <label className="text-xs font-bold uppercase text-slate-300 block mb-1.5">
-                  UPI ID / Virtual Address (India):
+                  UPI Virtual ID (India / Google Pay):
                 </label>
                 <input
                   type="text"
                   value={upi}
                   onChange={(e) => setUpi(e.target.value)}
                   placeholder="e.g. anujbhagat@okaxis or phone@paytm"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-500 font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-500 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Generates instant native payment links (`upi://pay?pa=...`) for Google Pay, PhonePe, & Paytm!
+                  Generates instant deep payment links (`upi://pay?pa=...`) right for Google Pay, PhonePe, and Paytm.
                 </p>
               </div>
 
               <div>
                 <label className="text-xs font-bold uppercase text-slate-300 block mb-1.5">
-                  Venmo Handle / PayPal (Global / US):
+                  Venmo Handle / PayPal (US & Global):
                 </label>
                 <input
                   type="text"
                   value={venmo}
                   onChange={(e) => setVenmo(e.target.value)}
-                  placeholder="e.g. @anuj-bhagat or anuj-venmo"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-500 font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                  placeholder="e.g. @anuj-bhagat or paypal.me/anuj"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-500 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Generates instant direct web links right for Venmo and PayPal.
+                  Connects instant cross-border settlement checkout web triggers.
                 </p>
               </div>
 
@@ -195,11 +211,11 @@ export default function Navbar() {
                 <button
                   type="submit"
                   disabled={savedSuccess}
-                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-black px-6 py-3 rounded-xl transition shadow-xl text-sm flex items-center gap-2"
+                  className="bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#34A853] hover:opacity-95 text-white font-black px-6 py-3 rounded-2xl transition shadow-xl text-sm flex items-center gap-2 active:scale-95"
                 >
                   {savedSuccess ? (
                     <>
-                      <CheckCircle className="w-4 h-4" /> Saved Successfully!
+                      <CheckCircle className="w-4 h-4" /> Profile Updated!
                     </>
                   ) : (
                     "Save Payment Links"
