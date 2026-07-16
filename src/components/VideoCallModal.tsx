@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
-import { Mic, MicOff, Video, VideoOff, RefreshCw, Sparkles, PhoneOff, Volume2, Loader2, Users, Globe } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, RefreshCw, Sparkles, PhoneOff, Volume2, Loader2, Users, Globe, Activity } from 'lucide-react';
 
 interface VideoCallModalProps {
   isOpen: boolean;
@@ -25,12 +25,17 @@ interface ARTranslationItem {
   y?: number;
 }
 
-// STEP 2: TOUCH-TO-IDENTIFY TARGET STATE
 interface TouchTargetState {
-  x: number; // percentage 0-100
-  y: number; // percentage 0-100
+  x: number;
+  y: number;
   label?: string;
   isLoading?: boolean;
+}
+
+interface RcaLogEntry {
+  time: string;
+  event: string;
+  details: string;
 }
 
 export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers }: VideoCallModalProps) {
@@ -52,6 +57,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [activeTouchTarget, setActiveTouchTarget] = useState<TouchTargetState | null>(null);
   const [remoteTouchMap, setRemoteTouchMap] = useState<Record<string, TouchTargetState | null>>({});
 
+  // DIAGNOSTIC WEBRTC INSTRUMENTATION & RCA PANEL STATE
+  const [rcaLogs, setRcaLogs] = useState<RcaLogEntry[]>([]);
+  const [showRcaPanel, setShowRcaPanel] = useState<boolean>(false);
+
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const sessionNotesRef = useRef<string[]>([]);
@@ -65,18 +74,35 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const arSamplerIntervalRef = useRef<any>(null);
   const targetTimeoutRef = useRef<any>(null);
 
+  const logRcaInstrument = (event: string, details: string) => {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    console.info(`[WebRTC RCA Telemetry • ${timestamp}] ${event}: ${details}`);
+    setRcaLogs(prev => [...prev.slice(-35), { time: timestamp, event, details }]);
+  };
+
   useEffect(() => {
+    let isMounted = true;
     if (isOpen && currentUser) {
       sessionNotesRef.current = [];
       lastCapturedImageRef.current = undefined;
       setArTranslations([]);
       setActiveTouchTarget(null);
-      startLocalWebcam('user');
-      setupWebRTCSignaling();
+      setRcaLogs([]);
+
+      const initStudioSequence = async () => {
+        logRcaInstrument('INIT_START', `User ${currentUser.name} (${currentUser.id}) launched studio right inside room ${groupId}. Acquiring camera tracks strictly before joining websocket signaling...`);
+        const cameraReady = await startLocalWebcam('user');
+        if (!isMounted) return;
+        logRcaInstrument('INIT_CAMERA', cameraReady ? 'Local hardware webcam tracks successfully loaded and ready for peers' : 'Warning: Local hardware device returned zero stream tracks');
+        setupWebRTCSignaling();
+      };
+
+      initStudioSequence();
     } else {
       cleanupSession();
     }
     return () => {
+      isMounted = false;
       cleanupSession();
     };
   }, [isOpen]);
@@ -187,7 +213,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } catch (e) { /* no-op */ }
   };
 
-  const startLocalWebcam = async (mode: 'user' | 'environment') => {
+  const startLocalWebcam = async (mode: 'user' | 'environment'): Promise<boolean> => {
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (localStreamRef.current) {
@@ -210,9 +236,12 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             payload: { userId: currentUser.id, userName: currentUser.name }
           });
         }
+        return true;
       }
-    } catch (err) {
-      console.warn('Could not acquire camera device track:', err);
+      return false;
+    } catch (err: any) {
+      logRcaInstrument('CAMERA_ERROR', `Could not attach physical device track: ${err?.message || err}`);
+      return false;
     }
   };
 
@@ -221,11 +250,23 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     const channel = supabase.channel(`webrtc_call_${groupId}`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'peer-join' }, async ({ payload }) => {
         if (payload.userId === currentUser.id) return;
+        logRcaInstrument('PEER_JOIN', `New entrant detected: ${payload.userName} (${payload.userId}). Creating initiator offer connection...`);
+        const stalePc = peerConnectionsRef.current.get(payload.userId);
+        if (stalePc) {
+          stalePc.close();
+          peerConnectionsRef.current.delete(payload.userId);
+        }
         createPeerConnection(payload.userId, payload.userName, true);
       })
       .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
         if (payload.targetId !== currentUser.id) return;
-        const pc = createPeerConnection(payload.senderId, payload.senderName, false);
+        logRcaInstrument('WEBRTC_OFFER', `Received remote SDP offer from ${payload.senderName}. Generating SDP answer with attached video tracks...`);
+        const stalePc = peerConnectionsRef.current.get(payload.senderId);
+        if (stalePc && stalePc.signalingState !== 'stable') {
+          stalePc.close();
+          peerConnectionsRef.current.delete(payload.senderId);
+        }
+        const pc = peerConnectionsRef.current.get(payload.senderId) || createPeerConnection(payload.senderId, payload.senderName, false);
         await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -234,12 +275,16 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           event: 'webrtc-answer',
           payload: { targetId: payload.senderId, senderId: currentUser.id, answer }
         });
+        logRcaInstrument('SDP_ANSWER_SENT', `Transmitted SDP answer back directly to ${payload.senderName}.`);
       })
       .on('broadcast', { event: 'webrtc-answer' }, async ({ payload }) => {
         if (payload.targetId !== currentUser.id) return;
+        logRcaInstrument('WEBRTC_ANSWER', `Received remote SDP answer ACK from ${payload.senderId}. Setting remote description...`);
         const pc = peerConnectionsRef.current.get(payload.senderId);
         if (pc) {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+        } else {
+          logRcaInstrument('RCA_WARNING', `Received SDP answer for unknown connection ID ${payload.senderId}`);
         }
       })
       .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
@@ -248,6 +293,16 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         if (pc && payload.candidate) {
           pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
         }
+      })
+      .on('broadcast', { event: 'peer-leave' }, async ({ payload }) => {
+        if (payload.userId === currentUser.id) return;
+        logRcaInstrument('PEER_LEAVE', `User ${payload.userName || payload.userId} dropped/left call. Cleaning remote stream tile...`);
+        const pc = peerConnectionsRef.current.get(payload.userId);
+        if (pc) {
+          pc.close();
+          peerConnectionsRef.current.delete(payload.userId);
+        }
+        setRemoteStreams(prev => prev.filter(s => s.peerId !== payload.userId));
       })
       .on('broadcast', { event: 'ar-sync' }, ({ payload }) => {
         if (payload.peerId && payload.translations) {
@@ -261,11 +316,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED' && currentUser) {
+          logRcaInstrument('CHANNEL_SUCCEEDED', `Signaling subscribed across webrtc_call_${groupId}. Announcing presence via peer-join...`);
           channel.send({
             type: 'broadcast',
             event: 'peer-join',
             payload: { userId: currentUser.id, userName: currentUser.name }
           });
+        } else {
+          logRcaInstrument('CHANNEL_STATUS', `Supabase status check: ${status}`);
         }
       });
 
@@ -282,10 +340,20 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
     peerConnectionsRef.current.set(remoteUserId, pc);
 
-    if (localStreamRef.current) {
+    pc.onconnectionstatechange = () => {
+      logRcaInstrument('CONN_STATE', `Link with ${remoteUserName} changed right to ${pc.connectionState}`);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        logRcaInstrument('RCA_RECOVERY', `Connection dropped or failed with ${remoteUserName}. Retrying peer connection cleanup & offer initiation.`);
+      }
+    };
+
+    if (localStreamRef.current && localStreamRef.current.getTracks().length > 0) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
       });
+      logRcaInstrument('TRACKS_ATTACHED', `Attached ${localStreamRef.current.getTracks().length} physical video/audio tracks to ${remoteUserName}.`);
+    } else {
+      logRcaInstrument('RCA_ERROR', `createPeerConnection run while localStreamRef has zero active hardware tracks for ${remoteUserName}!`);
     }
 
     pc.onicecandidate = (e) => {
@@ -301,9 +369,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     pc.ontrack = (e) => {
       const stream = e.streams[0];
       if (stream) {
+        logRcaInstrument('REMOTE_TRACK_RECEIVED', `Received active live video track right from peer ${remoteUserName}! Displaying across tile right now.`);
         setRemoteStreams(prev => {
-          if (prev.some(s => s.peerId === remoteUserId)) return prev;
-          return [...prev, { peerId: remoteUserId, peerName: remoteUserName, stream }];
+          const filtered = prev.filter(s => s.peerId !== remoteUserId);
+          return [...filtered, { peerId: remoteUserId, peerName: remoteUserName, stream }];
         });
       }
     };
@@ -311,11 +380,13 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     if (isInitiator && channelRef.current && currentUser) {
       pc.createOffer().then(offer => {
         pc.setLocalDescription(offer);
-        channelRef.current.send({
+        channelRef.current!.send({
           type: 'broadcast',
           event: 'webrtc-offer',
           payload: { targetId: remoteUserId, senderId: currentUser.id, senderName: currentUser.name, offer }
         });
+      }).catch(err => {
+        logRcaInstrument('SDP_OFFER_ERROR', `Failed generating offer for ${remoteUserName}: ${err?.message}`);
       });
     }
 
@@ -350,7 +421,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     startLocalWebcam(nextMode);
   };
 
-  // STEP 2: INTERACTIVE TOUCH-TO-IDENTIFY ON LIVE VIDEO
   const handleTouchIdentify = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (isAiProcessing || videoDisabled || isVoiceRecording) return;
     
@@ -358,7 +428,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     const clickX = ((e.clientX - rect.left) / rect.width) * 100;
     const clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
-    // Manual tap dismiss right on an existing ring right right ahead of the timer
     if (activeTouchTarget && Math.abs(activeTouchTarget.x - clickX) < 8 && Math.abs(activeTouchTarget.y - clickY) < 8) {
       setActiveTouchTarget(null);
       if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
@@ -511,7 +580,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setIsAiSpeaking(true);
         setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
-        // UPDATE TOUCH TARGET WITH VERIFIED LABEL & 5-SECOND AUTO-FADE TIMER
         if (touchedCoords) {
           const resolvedTarget: TouchTargetState = { x: touchedCoords.x, y: touchedCoords.y, label: targetLabel, isLoading: false };
           setActiveTouchTarget(resolvedTarget);
@@ -560,6 +628,20 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try { mediaRecorderRef.current.stop(); } catch (err) { /* no-op */ }
     }
+
+    if (channelRef.current && currentUser) {
+      logRcaInstrument('PEER_LEAVE_TRANSMIT', 'Sending peer-leave explicit disconnect broadcast across websocket prior to cleanup');
+      try {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'peer-leave',
+          payload: { userId: currentUser.id, userName: currentUser.name }
+        });
+      } catch (e) { /* no-op */ }
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
@@ -568,10 +650,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     peerConnectionsRef.current.clear();
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-    }
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
     }
     setRemoteStreams([]);
     setIsTranslateArActive(false);
@@ -589,19 +667,30 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   return (
     <div className="fixed inset-0 z-[170] bg-slate-950 flex flex-col justify-between overflow-hidden animate-in fade-in duration-150">
       
-      {/* MINIMALIST HEADER BAR (`Zero Verbosity`) */}
+      {/* MINIMALIST HEADER BAR (`Zero Verbosity + Diagnostic RCA Inspector`) */}
       <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2.5 flex items-center justify-between shrink-0 shadow-lg z-30">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shrink-0" />
           <span className="font-extrabold text-white text-xs sm:text-sm truncate">
             {groupTitle || 'Live Video Studio'}
           </span>
-          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[340px]">
+          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[320px]">
             {telemetryStatus}
           </span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowRcaPanel(!showRcaPanel)}
+            className={`text-[11px] font-bold px-2 py-1 rounded-xl border flex items-center gap-1 transition ${
+              showRcaPanel ? 'bg-brand-600 text-white border-brand-400' : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+            title="Inspect Factual WebRTC RCA Instrumentation Telemetry Logs"
+          >
+            <Activity className="w-3.5 h-3.5 text-brand-400" /> RCA Logs ({rcaLogs.length})
+          </button>
+
           {isTranslateArActive ? (
             <span className="bg-[#4285F4]/20 text-[#4285F4] border border-[#4285F4]/50 text-[11px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1.5 animate-pulse">
               <Globe className="w-3.5 h-3.5" /> AR Translate ON
@@ -625,6 +714,28 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           )}
         </div>
       </div>
+
+      {/* EXPANDABLE DIAGNOSTIC FACTUAL RCA PANEL */}
+      {showRcaPanel && (
+        <div className="bg-slate-900/95 backdrop-blur-xl border-b border-slate-700 max-h-56 overflow-y-auto px-4 py-3 z-40 shrink-0 text-xs font-mono text-slate-200 shadow-2xl animate-in slide-in-from-top-3 duration-150">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2 font-black text-white">
+            <span>🔬 FACTUAL WEBRTC RCA DIAGNOSTIC TELEMETRY LOG</span>
+            <button type="button" onClick={() => setShowRcaPanel(false)} className="text-slate-400 hover:text-white font-sans text-xs">✕ Close Panel</button>
+          </div>
+          {rcaLogs.length === 0 ? (
+            <p className="text-slate-400 italic py-1">No diagnostic connection lifecycle events recorded right inside this session yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {rcaLogs.map((log, index) => (
+                <div key={index} className="flex gap-2 border-b border-slate-800/50 pb-1 leading-snug">
+                  <span className="text-amber-400 shrink-0 font-bold">[{log.time}] {log.event}:</span>
+                  <span className="text-slate-200 break-words">{log.details}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SINGLE-SCREEN VIEWPORT FIT (`No bottom cropping`) */}
       <div className="w-full flex-1 min-h-0 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] p-2 sm:p-4 flex flex-col sm:flex-row gap-2.5 overflow-hidden relative">
@@ -672,7 +783,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             </div>
           )}
 
-          {/* COMPREHENSIVE MULTI-SECTION OPTICAL OVERLAY CARD (`All Details in 1 clean panel`) */}
+          {/* COMPREHENSIVE MULTI-SECTION OPTICAL OVERLAY CARD */}
           {arTranslations.slice(0, 1).map((item, idx) => (
             <div
               key={idx}
@@ -759,7 +870,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 </div>
               )}
 
-              {/* TARGETED PEER AR OVERLAY (EXCLUSIVELY OVER SCANNING PEER'S TILE) */}
+              {/* TARGETED PEER AR OVERLAY */}
               {peerArItems.slice(0, 1).map((item, idx) => (
                 <div
                   key={idx}
@@ -848,7 +959,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-gradient-to-tr from-[#4285F4] via-[#34A853] to-[#FBBC05] text-white border-white ring-2 ring-[#4285F4] animate-pulse'
               : 'bg-slate-800 text-slate-200 border-slate-700 hover:text-white'
           }`}
-          title="Toggle Real-Time AR Visual Translate right over non-English labels"
+          title="Toggle Real-Time AR Visual Translate over non-English labels"
         >
           <Globe className="w-5 h-5 text-amber-300" />
         </button>
