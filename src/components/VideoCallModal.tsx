@@ -35,9 +35,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; peerName: string; stream: MediaStream }>>([]);
   const [telemetryStatus, setTelemetryStatus] = useState<string>('Ready • Tap ✨ to speak • Tap 🌐 for AR Translate');
 
-  // STEP 1: LIVE AR TRANSLATION LAYER STATE
+  // STEP 1: LIVE AR TRANSLATION LAYER STATE & TARGETED PEER MAP
   const [isTranslateArActive, setIsTranslateArActive] = useState(false);
   const [arTranslations, setArTranslations] = useState<ARTranslationItem[]>([]);
+  const [remoteArMap, setRemoteArMap] = useState<Record<string, ARTranslationItem[]>>({});
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -97,6 +98,13 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           const data = await response.json();
           if (data && Array.isArray(data.translations) && data.translations.length > 0) {
             setArTranslations(data.translations);
+            if (channelRef.current && currentUser) {
+              channelRef.current.send({
+                type: 'broadcast',
+                event: 'ar-sync',
+                payload: { peerId: currentUser.id, translations: data.translations }
+              });
+            }
             data.translations.forEach((item: ARTranslationItem) => {
               const fullDetails = `🌐 AR Translation Complete:\n• Item & Brand: ${item.title || item.translation || 'Product'}\n• Highlights: ${item.features || 'N/A'}\n• Directions: ${item.instructions || 'N/A'}\n• Precautions: ${item.precautions || 'N/A'}`;
               if (!sessionNotesRef.current.some(note => note.includes(item.title || item.translation || 'Item'))) {
@@ -113,6 +121,13 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       if (!isTranslateArActive && isOpen) {
         setTelemetryStatus('Ready • Tap ✨ to speak • Tap 🌐 for AR Translate');
         setArTranslations([]);
+        if (channelRef.current && currentUser) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'ar-sync',
+            payload: { peerId: currentUser.id, translations: [] }
+          });
+        }
       }
     }
 
@@ -218,6 +233,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         const pc = peerConnectionsRef.current.get(payload.senderId);
         if (pc && payload.candidate) {
           pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+        }
+      })
+      .on('broadcast', { event: 'ar-sync' }, ({ payload }) => {
+        if (payload.peerId && payload.translations) {
+          setRemoteArMap(prev => ({
+            ...prev,
+            [payload.peerId]: payload.translations
+          }));
         }
       })
       .subscribe((status) => {
@@ -589,28 +612,69 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           </div>
         </div>
 
-        {/* TILE 2+: REMOTE PEER VIDEO TRACKS */}
-        {remoteStreams.map(peer => (
-          <div key={peer.peerId} className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
-            <video
-              ref={(node) => {
-                if (node && node.srcObject !== peer.stream) {
-                  node.srcObject = peer.stream;
-                  node.play().catch(() => {});
-                }
-              }}
-              autoPlay
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover transition duration-200"
-            />
-            <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-brand-400 rounded-full shrink-0 animate-pulse" />
-              <span className="text-[11px] font-black text-white truncate">
-                {peer.peerName}
-              </span>
+        {/* TILE 2+: REMOTE PEER VIDEO TRACKS + TARGETED PEER AR OVERLAY */}
+        {remoteStreams.map(peer => {
+          const peerArItems = remoteArMap[peer.peerId] || [];
+
+          return (
+            <div key={peer.peerId} className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
+              <video
+                ref={(node) => {
+                  if (node && node.srcObject !== peer.stream) {
+                    node.srcObject = peer.stream;
+                    node.play().catch(() => {});
+                  }
+                }}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover transition duration-200"
+              />
+
+              {/* TARGETED PEER AR OVERLAY (EXCLUSIVELY OVER SCANNING PEER'S TILE) */}
+              {peerArItems.slice(0, 1).map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    left: `${Math.min(Math.max(item.x || 48, 20), 60)}%`,
+                    top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`,
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                  className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
+                >
+                  <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
+                    <span>🏷️</span>
+                    <span className="truncate">{item.title || item.translation}</span>
+                  </div>
+                  
+                  {item.features && (
+                    <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight">
+                      <strong className="text-emerald-400 font-bold">Features:</strong> {item.features}
+                    </div>
+                  )}
+                  
+                  {item.instructions && (
+                    <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight">
+                      <strong className="text-amber-300 font-bold">How to Use:</strong> {item.instructions}
+                    </div>
+                  )}
+
+                  {item.precautions && (
+                    <div className="text-[11px] sm:text-xs font-bold text-rose-300 bg-rose-950/40 p-2 rounded-xl border border-rose-500/30 leading-tight">
+                      <strong className="text-rose-400 uppercase">Caution:</strong> {item.precautions}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-brand-400 rounded-full shrink-0 animate-pulse" />
+                <span className="text-[11px] font-black text-white truncate">
+                  {peer.peerName}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* CIRCULAR ICON-ONLY TOUCH DOCK */}
