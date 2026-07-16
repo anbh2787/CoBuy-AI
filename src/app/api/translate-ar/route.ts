@@ -7,10 +7,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!frameBase64 || frameBase64.length < 2000 || frameBase64 === 'data:,') {
-      return NextResponse.json({
-        translations: [],
-        summary: "Empty camera buffer returned right from hardware."
-      }, { status: 200 });
+      return NextResponse.json({ translations: [] }, { status: 200 });
     }
 
     if (apiKey && apiKey !== '') {
@@ -31,30 +28,26 @@ export async function POST(req: Request) {
             }
           },
           `
-You are an ultra-fast optical character recognition (OCR) and AR real-time translation engine embedded across a live smartphone video camera stream.
-Examine the exact physical pixels across the provided picture above right now.
+You are a precision optical overlay engine right inside a live smartphone camera stream (like Google Lens AR).
+Examine the physical picture right now.
 
-Your exact tasks:
-1. Scan for any foreign or non-English text right across store price labels, menus, packaging labels, or sign boards (e.g. Japanese Kanji/Kana, French, German, Chinese, Spanish, or foreign currency figures such as ¥, €, £).
-2. Translate all identified non-English text directly into ${targetLanguage}. If foreign currency values are detected (like 3,200 JPY or 45 EUR), append the converted approximate USD total next right right right right right right right right to the English translation string (e.g., "$21.50 USD").
-3. Estimate approximate normalized visual screen coordinates (` + `x, y as percentages between 10 and 80` + `) where each label or sign resides across the picture so our frontend can position floating AR translation chips directly over the item.
-4. Return a STRICT JSON format block enclosed right inside \`\`\`json blocks containing the translation entries right below. If no foreign text or currency is found right inside this specific frame, return an empty array.
+Your exact instructions for clean optical overlay:
+1. Scan the central physical item, bottle, container, or sign for any non-English character text right across its face (` + `e.g. Japanese Kanji on a product bottle, foreign dining menus, or currency values` + `).
+2. INSTEAD OF FRAGMENTING TEXT INTO MULTIPLE OVERLAPPING TILES, consolidate the primary identity and instructions of the object right right into EXACTLY ONE single, unified English product summary string (or at most two widely separated distinct items if two entirely separate physical boxes sit next to each other on a table).
+   - For example, if aiming at a Japanese bottle showing brand and features, output: "Hakugen Earth: Extra Mint Cooling Spray for Clothing".
+   - If foreign currency is detected (e.g. ¥3,200), include the estimated USD price equivalent right beside the item name.
+3. Determine the approximate center-point visual coordinates (x, y percentages between 20 and 75) directly over where the physical label lettering appears on the product container so our frontend renders a singular flush decal over the physical label without cluttering the screen.
+4. Return a STRICT JSON block enclosed inside \`\`\`json blocks right right below.
 
-Expected JSON structure inside response:
+Expected JSON schema inside response:
 \`\`\`json
 {
   "translations": [
     {
-      "original": "¥3,200 (純米大吟醸)",
-      "translation": "Junmai Daiginjo Premium Sake ($21.44 USD)",
-      "x": 40,
-      "y": 55
-    },
-    {
-      "original": "渋谷本店限定",
-      "translation": "Shibuya Flagship Store Exclusive",
-      "x": 35,
-      "y": 25
+      "original": "白元アース株式会社 衣類用冷感スプレー",
+      "translation": "Hakugen Earth: Extra Mint Cooling Spray for Clothing",
+      "x": 42,
+      "y": 45
     }
   ]
 }
@@ -72,7 +65,7 @@ Expected JSON structure inside response:
           try {
             const parsed = JSON.parse(jsonMatch[1]);
             if (parsed && Array.isArray(parsed.translations)) {
-              translations = parsed.translations;
+              translations = parsed.translations.slice(0, 2);
             }
           } catch (e) {
             console.warn("AR JSON parsing warning:", e);
@@ -81,10 +74,10 @@ Expected JSON structure inside response:
 
         return NextResponse.json({
           translations,
-          status: 'AR_TRANSLATION_COMPLETE'
+          status: 'AR_OVERLAY_COMPLETE'
         }, { status: 200 });
       } catch (geminiErr: any) {
-        console.error('AR Translation model error:', geminiErr);
+        console.error('AR model note:', geminiErr);
         return NextResponse.json({ translations: [], error: geminiErr.message }, { status: 200 });
       }
     }
@@ -92,15 +85,15 @@ Expected JSON structure inside response:
     return NextResponse.json({
       translations: [
         {
-          original: "Foreign Product Tag (Offline Demo)",
-          translation: "Verified English AR Translation Demo ($25.00 USD)",
+          original: "Foreign Label",
+          translation: "Verified English AR Decal Demo ($25.00 USD)",
           x: 45,
-          y: 40
+          y: 45
         }
       ],
       status: 'DEMO_MODE'
     }, { status: 200 });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Failed to run AR translation loop', details: error?.message }, { status: 500 });
+    return NextResponse.json({ error: 'AR loop failure', details: error?.message }, { status: 500 });
   }
 }

@@ -540,22 +540,18 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             />
           )}
 
-          {/* LIVE AR TRANSLATION CHIPS OVERLAY (`Pinned above items`) */}
-          {arTranslations.map((item, idx) => (
+          {/* FLUSH OPTICAL LENS OVERLAY (`Single Consolidated Lens Decal over item text`) */}
+          {arTranslations.slice(0, 2).map((item, idx) => (
             <div
               key={idx}
               style={{
-                left: `${Math.min(Math.max(item.x || 35, 10), 72)}%`,
-                top: `${Math.min(Math.max(item.y || 40, 15), 78)}%`
+                left: `${Math.min(Math.max(item.x || 45, 15), 65)}%`,
+                top: `${Math.min(Math.max(item.y || 45, 20), 75)}%`,
+                transform: 'translate(-40%, -50%)'
               }}
-              className="absolute z-20 px-3 py-2 rounded-2xl bg-black/85 backdrop-blur-md border border-amber-400/80 text-white shadow-2xl animate-in zoom-in-75 duration-200 pointer-events-none flex flex-col gap-0.5 max-w-[260px]"
+              className="absolute z-20 px-4 py-2 rounded-2xl bg-[#22252A]/90 backdrop-blur-md border-2 border-amber-400 text-amber-300 font-extrabold text-xs sm:text-sm shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex items-center justify-center text-center max-w-[80%] tracking-tight"
             >
-              <span className="text-[10px] text-amber-300 font-extrabold flex items-center gap-1 uppercase tracking-wider truncate">
-                🌐 AR Translate ({item.original})
-              </span>
-              <span className="text-xs sm:text-sm font-black text-white leading-snug truncate">
-                {item.translation}
-              </span>
+              <span>{item.translation}</span>
             </div>
           ))}
 
