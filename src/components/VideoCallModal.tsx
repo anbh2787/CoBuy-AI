@@ -601,7 +601,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         }
 
         const cleanLogSummary = touchedCoords
-          ? `🎯 Targeted Object Touch [X:${touchedCoords.x}%, Y:${touchedCoords.y}%]: "${reply}"`
+          ? `🎯 Targeted Item from Video: "${reply}"`
           : `📸 AI Video Observation: "${reply}"`;
         sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
 
