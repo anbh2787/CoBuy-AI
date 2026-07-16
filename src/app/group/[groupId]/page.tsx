@@ -255,7 +255,7 @@ export default function GroupChatRoom({ params }: PageProps) {
     );
   }
 
-  // CLOSE CALL & COMMIT AI VISUAL NOTES TO CHAT TIMELINE
+  // CLOSE CALL & COMMIT AI VISUAL NOTES TO CHAT TIMELINE PLUS AUTOMATIC @SHOPPY BUYING CAROUSEL
   const handleCloseVideoCallWithNotes = async (sessionNotes?: string[]) => {
     setIsVideoCallOpen(false);
     if (sessionNotes && sessionNotes.length > 0 && group && currentUser) {
@@ -272,7 +272,8 @@ export default function GroupChatRoom({ params }: PageProps) {
         createdAt: new Date().toISOString()
       };
 
-      setGroup(prev => prev ? ({ ...prev, messages: [...prev.messages, summaryMsg] }) : prev);
+      let nextGroup = { ...group, messages: [...group.messages, summaryMsg] };
+      setGroup(nextGroup);
 
       try {
         await supabase.from('messages').insert({
@@ -284,6 +285,51 @@ export default function GroupChatRoom({ params }: PageProps) {
         });
       } catch (err) {
         console.warn('Note persistence check note:', err);
+      }
+
+      // AUTOMATIC @SHOPPY POST-CALL BUYING CAROUSEL GENERATOR
+      try {
+        const observedItems = sessionNotes.join('. ');
+        const shoppyPrompt = `Based directly right right on these items discovered across our camera stream during our video consultation: (${observedItems}), automatically curate 4 exact matching buying links complete with pricing, ratings, and checkouts across our interactive shopping cards!`;
+        
+        const shoppyRes = await fetch('/api/shoppy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messageText: shoppyPrompt,
+            group: nextGroup,
+            currentUserId: currentUser.id
+          })
+        });
+
+        const shoppyData = await shoppyRes.json();
+        if (shoppyData.structuredProducts && shoppyData.structuredProducts.length > 0) {
+          const shoppyContent = `🛍️ **@SHOPPY Post-Call Buying Recommendations:**\nBased right right right right right right on what we just inspected across live video together, here are verified buying options complete right with one-click **❤️ Vote** and external provider triggers right now!`;
+          const shoppyMsg: Message = {
+            id: 'post-shoppy-' + Date.now(),
+            groupId: group.id,
+            senderId: 'user-shoppy',
+            senderName: '@SHOPPY AI',
+            senderAvatar: AI_AVATAR,
+            content: shoppyContent,
+            isAiResponse: true,
+            structuredProducts: shoppyData.structuredProducts,
+            createdAt: new Date().toISOString()
+          };
+
+          setGroup(prev => prev ? { ...prev, messages: [...prev.messages, shoppyMsg] } : prev);
+
+          const persistedString = `${shoppyContent}\n\n<!--SHOPPY_DATA:${JSON.stringify(shoppyData.structuredProducts)}-->`;
+          await supabase.from('messages').insert({
+            group_id: group.id,
+            sender_id: currentUser.id,
+            sender_name: '@SHOPPY AI',
+            content: persistedString,
+            is_ai_response: true
+          });
+        }
+      } catch (shoppyErr) {
+        console.warn('Post-call shoppy check note:', shoppyErr);
       }
     }
   };
@@ -705,76 +751,95 @@ export default function GroupChatRoom({ params }: PageProps) {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] max-h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden bg-slate-950 relative">
+    <div className="w-full h-[calc(100vh-64px)] max-h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden bg-[#F4F1EA] relative text-[#22252A]">
       {/* LEFT CHAT AREA */}
       <div className="flex-1 flex flex-col h-full max-h-full relative min-w-0 overflow-hidden shrink-0">
         
         {/* TOP RINGING BANNER IF CALL IS ACTIVE ACROSS THE GROUP */}
         {isCallActiveBanner && !isVideoCallOpen && (
-          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-brand-600 p-2.5 px-4 text-white font-extrabold text-xs flex items-center justify-between shadow-md animate-in slide-in-from-top duration-200 z-40">
+          <div className="bg-gradient-to-r from-[#2B4C7E] via-[#3B5998] to-[#4A7C59] p-2.5 px-4 text-white font-extrabold text-xs flex items-center justify-between shadow-md animate-in slide-in-from-top duration-200 z-40">
             <span className="flex items-center gap-2 truncate">
-              <span className="w-2.5 h-2.5 bg-white rounded-full animate-ping shrink-0" />
-              <span>🟢 Live Group & AI Multimodal Video Call Active inside Room!</span>
+              <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping shrink-0" />
+              <span>🟢 Live Google CoBuy Studio Active inside this Workspace!</span>
             </span>
             <button
               onClick={() => setIsVideoCallOpen(true)}
-              className="bg-slate-950 text-emerald-400 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 flex items-center gap-1.5 shadow-lg"
+              className="bg-white text-[#2B4C7E] hover:bg-slate-50 px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 flex items-center gap-1.5 shadow-md"
             >
-              <PhoneCall className="w-3.5 h-3.5" /> Join Video Room
+              <PhoneCall className="w-3.5 h-3.5" /> Hop in Video Room
             </button>
           </div>
         )}
 
-        {/* FIXED/STICKY TOP HEADER WITH VIDEO CALL & SHARE ICON */}
-        <div className="bg-slate-900 border-b border-slate-800 px-3.5 sm:px-5 py-3 flex items-center justify-between shadow-md z-30 shrink-0">
+        {/* WARM CREAM STICKY HEADER (`bg-[#F9F7F1]`) */}
+        <div className="bg-[#F9F7F1] border-b border-amber-900/10 px-3.5 sm:px-5 py-3 flex items-center justify-between shadow-xs z-30 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-            <Link href="/" className="text-slate-400 hover:text-white transition p-1 rounded-lg shrink-0">
+            <Link href="/" className="text-slate-500 hover:text-[#22252A] transition p-1 rounded-lg shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="min-w-0">
-              <h1 className="font-black text-white text-sm sm:text-lg flex items-center gap-1.5 sm:gap-2 truncate">
-                <Lock className="w-4 h-4 text-emerald-400 shrink-0" /> <span className="truncate">{group.title}</span>
+              <h1 className="font-black text-[#22252A] text-sm sm:text-lg flex items-center gap-1.5 sm:gap-2 truncate">
+                <span className="w-2 h-2 rounded-full bg-[#4A7C59] shrink-0 animate-pulse" />
+                <span className="truncate">{group.title}</span>
               </h1>
-              <span className="text-[11px] sm:text-xs text-slate-400 flex items-center gap-1.5 font-bold">
-                <Users className="w-3.5 h-3.5 text-brand-400 shrink-0" /> {group.members.length} members
-                <span className="inline-block w-2 h-2 bg-emerald-400 rounded-full animate-pulse ml-2 shrink-0" title="WebSockets Active" />
+              <span className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5 font-bold">
+                <Users className="w-3.5 h-3.5 text-[#2B4C7E] shrink-0" /> {group.members.length} members connected across Google CoBuy
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* START VIDEO & AI CALL BUTTON */}
-            <button
-              onClick={handleStartOrJoinVideoCall}
-              className="bg-gradient-to-r from-emerald-500 via-teal-600 to-brand-600 hover:opacity-95 text-slate-950 font-black px-3 py-2 sm:px-3.5 sm:py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition active:scale-95 shrink-0"
-              title="Start Live Group Video & AI Multimodal Room"
-            >
-              <Video className="w-4 h-4 text-slate-950 shrink-0" />
-              <span className="hidden xs:inline font-black">Video & AI Call</span>
-            </button>
-
             {/* ICON-ONLY SHARE BUTTON */}
             <button
               onClick={handleCopyInvite}
-              className="bg-brand-600/20 hover:bg-brand-600/35 text-brand-400 font-bold p-2.5 rounded-xl transition border border-brand-500/40 shadow-sm shrink-0"
-              title="Copy room invite link"
+              className="bg-white hover:bg-[#F4F1EA] text-[#2B4C7E] font-bold p-2.5 rounded-xl transition border border-amber-900/15 shadow-xs shrink-0"
+              title="Copy room access invitation link"
             >
-              {copiedLink ? <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-in zoom-in-50" /> : <Share2 className="w-4 h-4" />}
+              {copiedLink ? <CheckCircle2 className="w-4 h-4 text-[#4A7C59] animate-in zoom-in-50" /> : <Share2 className="w-4 h-4" />}
             </button>
 
             <button
               onClick={() => setShowSidebarMobile(true)}
-              className="md:hidden bg-brand-600 hover:bg-brand-500 text-white font-extrabold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md"
-              title="Open Settle Board"
+              className="md:hidden bg-[#2B4C7E] hover:bg-[#203960] text-white font-extrabold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+              title="Open Settle Board & Ledger"
             >
-              <PanelsTopLeft className="w-4 h-4" />
+              <PanelsTopLeft className="w-4 h-4 text-white" />
               <span>Settle Board</span>
             </button>
           </div>
         </div>
 
-        {/* CHAT TIMELINE (THE ONLY SCROLLABLE REGION) */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 space-y-5">
+        {/* PROMINENT CENTRAL LIVE VIDEO STUDIO HERO CARD (KEY ELEMENT AMONG PARTICIPANTS) */}
+        <div className="p-3.5 sm:px-6 pt-3.5 shrink-0 bg-[#F4F1EA]">
+          <div className="bg-white border border-amber-900/15 rounded-[28px] p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-[#4285F4] via-[#EA4335] to-[#34A853]" />
+            <div className="pl-2 sm:pl-3 flex flex-col gap-1 text-left w-full sm:w-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase text-[#2B4C7E] tracking-wider flex items-center gap-1.5">
+                  🎥 Live Collaborative Video Studio
+                </span>
+                <span className="text-[11px] font-bold bg-[#4A7C59]/15 text-[#4A7C59] px-2 py-0.5 rounded-lg border border-[#4A7C59]/25">
+                  Option A Voice Engine
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 font-medium max-w-xl leading-relaxed">
+                Stream store displays, products, or itineraries right out loud with your crew. Tap our circular **`✨`** button during the call right right right right right right right right right right right to talk directly right right right right right right right right right right right to Gemini right right, and receive automatic `@SHOPPY` buying carousels upon hanging up!
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleStartOrJoinVideoCall}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md transition shrink-0 active:scale-95 group"
+            >
+              <Video className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
+              <span>Enter Live Video Studio &rarr;</span>
+            </button>
+          </div>
+        </div>
+
+        {/* CHAT TIMELINE REGION (`bg-[#F4F1EA]`) */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3.5 sm:px-6 py-3 space-y-5 bg-[#F4F1EA]">
           {group.messages.map(msg => {
             const isMe = msg.senderId === currentUser?.id && !msg.isAiResponse;
             const isBot = msg.isAiResponse;
@@ -904,14 +969,26 @@ export default function GroupChatRoom({ params }: PageProps) {
           </div>
         )}
 
-        {/* PINNED/FIXED BOTTOM INPUT TOOLBAR */}
-        <div className="bg-slate-900 border-t border-slate-800 p-2.5 sm:p-3.5 shrink-0 z-30">
+        {/* PINNED BOTTOM INPUT TOOLBAR IN WARM CREAM (`bg-[#F9F7F1]`) */}
+        <div className="bg-[#F9F7F1] border-t border-amber-900/10 p-2.5 sm:p-3.5 shrink-0 z-30">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2 max-w-5xl mx-auto">
+            
+            {/* QUICK VIDEO & SCAN CHIP */}
+            <button
+              type="button"
+              onClick={handleStartOrJoinVideoCall}
+              className="px-3.5 py-3 rounded-2xl bg-[#2B4C7E] hover:bg-[#203960] text-white font-extrabold text-xs transition shadow-xs flex items-center gap-1.5 shrink-0 active:scale-95"
+              title="Hop on Live Video & AI Studio right now"
+            >
+              <Video className="w-4 h-4 text-amber-300" />
+              <span className="hidden sm:inline">Hop on Video</span>
+            </button>
+
             <label
               title="Snap instant smartphone camera photo"
-              className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-brand-400 transition border border-slate-700 cursor-pointer flex items-center justify-center shrink-0 shadow-sm active:scale-95"
+              className="p-3 rounded-2xl bg-white hover:bg-[#F4F1EA] text-[#C45A45] transition border border-amber-900/15 cursor-pointer flex items-center justify-center shrink-0 shadow-xs active:scale-95"
             >
-              <Camera className="w-5 h-5 text-brand-400" />
+              <Camera className="w-5 h-5" />
               <input
                 type="file"
                 accept="image/*"
@@ -923,10 +1000,10 @@ export default function GroupChatRoom({ params }: PageProps) {
             </label>
 
             <label
-              title="Upload existing picture or multi-page PDF document"
-              className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white transition border border-slate-700 cursor-pointer flex items-center justify-center shrink-0 shadow-sm active:scale-95"
+              title="Upload existing picture or PDF document"
+              className="p-3 rounded-2xl bg-white hover:bg-[#F4F1EA] text-[#22252A] transition border border-amber-900/15 cursor-pointer flex items-center justify-center shrink-0 shadow-xs active:scale-95"
             >
-              <Paperclip className="w-5 h-5" />
+              <Paperclip className="w-5 h-5 text-slate-600" />
               <input
                 type="file"
                 accept="image/*,application/pdf"
@@ -943,15 +1020,15 @@ export default function GroupChatRoom({ params }: PageProps) {
                 value={messageInput}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder='Type "@SHOPPY find..." or "@SPLITTY split..." or tap 📸 / 📎...'
-                className="w-full bg-slate-800/90 border border-slate-700/90 rounded-2xl px-3.5 py-3 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition font-sans"
+                placeholder='Type "@SHOPPY compare..." or "@SPLITTY split..." or hop right inside video...'
+                className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition font-sans shadow-xs"
               />
             </div>
 
             <button
               type="submit"
               disabled={isAiProcessing || !messageInput.trim()}
-              className="bg-gradient-to-tr from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 disabled:opacity-40 disabled:pointer-events-none text-white p-3 sm:px-5 sm:py-3 rounded-2xl transition shadow-xl shrink-0 font-bold flex items-center gap-2"
+              className="bg-[#2B4C7E] hover:bg-[#203960] disabled:opacity-40 disabled:pointer-events-none text-white p-3 sm:px-5 sm:py-3 rounded-2xl transition shadow-md shrink-0 font-extrabold flex items-center gap-2 active:scale-95"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -959,20 +1036,20 @@ export default function GroupChatRoom({ params }: PageProps) {
         </div>
       </div>
 
-      {/* RIGHT PANEL: FINANCIAL BOARD (STATIC) */}
+      {/* RIGHT PANEL: FINANCIAL BOARD (WARM CREAM & WHITE CONTAINER) */}
       <div
         className={`${
-          showSidebarMobile ? 'flex flex-col fixed inset-0 z-50 bg-slate-950 overflow-hidden' : 'hidden'
-        } md:flex md:flex-col md:relative md:w-[400px] md:h-full md:max-h-full shrink-0 border-l border-slate-800 min-h-0 overflow-hidden bg-slate-950`}
+          showSidebarMobile ? 'flex flex-col fixed inset-0 z-50 bg-[#F4F1EA] overflow-hidden' : 'hidden'
+        } md:flex md:flex-col md:relative md:w-[400px] md:h-full md:max-h-full shrink-0 border-l border-amber-900/10 min-h-0 overflow-hidden bg-[#F4F1EA] text-[#22252A]`}
       >
         {showSidebarMobile && (
-          <div className="md:hidden p-4 bg-slate-900 border-b border-slate-800 shrink-0 z-50 flex items-center justify-between shadow-md">
-            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 truncate">
+          <div className="md:hidden p-4 bg-[#F9F7F1] border-b border-amber-900/10 shrink-0 z-50 flex items-center justify-between shadow-xs">
+            <h3 className="text-sm sm:text-base font-black text-[#22252A] flex items-center gap-2 truncate">
               💰 Min-Cash-Flow Settle Board
             </h3>
             <button
               onClick={() => setShowSidebarMobile(false)}
-              className="bg-brand-600 hover:bg-brand-500 text-white font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg active:scale-95 shrink-0"
+              className="bg-[#2B4C7E] hover:bg-[#203960] text-white font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0"
             >
               ← Back right to Chat (✕)
             </button>
