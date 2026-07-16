@@ -25,6 +25,14 @@ interface ARTranslationItem {
   y?: number;
 }
 
+// STEP 2: TOUCH-TO-IDENTIFY TARGET STATE
+interface TouchTargetState {
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
+  label?: string;
+  isLoading?: boolean;
+}
+
 export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers }: VideoCallModalProps) {
   const [audioMuted, setAudioMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
@@ -33,12 +41,16 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Array<{ peerId: string; peerName: string; stream: MediaStream }>>([]);
-  const [telemetryStatus, setTelemetryStatus] = useState<string>('Ready • Tap ✨ to speak • Tap 🌐 for AR Translate');
+  const [telemetryStatus, setTelemetryStatus] = useState<string>('Tap video item to target • Tap ✨ to speak • Tap 🌐 for AR');
 
   // STEP 1: LIVE AR TRANSLATION LAYER STATE & TARGETED PEER MAP
   const [isTranslateArActive, setIsTranslateArActive] = useState(false);
   const [arTranslations, setArTranslations] = useState<ARTranslationItem[]>([]);
   const [remoteArMap, setRemoteArMap] = useState<Record<string, ARTranslationItem[]>>({});
+
+  // STEP 2: TOUCH TARGET BOUNDING STATE & TARGETED PEER MAP
+  const [activeTouchTarget, setActiveTouchTarget] = useState<TouchTargetState | null>(null);
+  const [remoteTouchMap, setRemoteTouchMap] = useState<Record<string, TouchTargetState | null>>({});
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -51,12 +63,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimeoutRef = useRef<any>(null);
   const arSamplerIntervalRef = useRef<any>(null);
+  const targetTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     if (isOpen && currentUser) {
       sessionNotesRef.current = [];
       lastCapturedImageRef.current = undefined;
       setArTranslations([]);
+      setActiveTouchTarget(null);
       startLocalWebcam('user');
       setupWebRTCSignaling();
     } else {
@@ -119,7 +133,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } else {
       if (arSamplerIntervalRef.current) clearInterval(arSamplerIntervalRef.current);
       if (!isTranslateArActive && isOpen) {
-        setTelemetryStatus('Ready • Tap ✨ to speak • Tap 🌐 for AR Translate');
+        setTelemetryStatus('Tap video item to target • Tap ✨ to speak • Tap 🌐 for AR');
         setArTranslations([]);
         if (channelRef.current && currentUser) {
           channelRef.current.send({
@@ -237,10 +251,12 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .on('broadcast', { event: 'ar-sync' }, ({ payload }) => {
         if (payload.peerId && payload.translations) {
-          setRemoteArMap(prev => ({
-            ...prev,
-            [payload.peerId]: payload.translations
-          }));
+          setRemoteArMap(prev => ({ ...prev, [payload.peerId]: payload.translations }));
+        }
+      })
+      .on('broadcast', { event: 'touch-target-sync' }, ({ payload }) => {
+        if (payload.peerId) {
+          setRemoteTouchMap(prev => ({ ...prev, [payload.peerId]: payload.target }));
         }
       })
       .subscribe((status) => {
@@ -334,6 +350,42 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     startLocalWebcam(nextMode);
   };
 
+  // STEP 2: INTERACTIVE TOUCH-TO-IDENTIFY ON LIVE VIDEO
+  const handleTouchIdentify = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isAiProcessing || videoDisabled || isVoiceRecording) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+    // Manual tap dismiss right on an existing ring right right ahead of the timer
+    if (activeTouchTarget && Math.abs(activeTouchTarget.x - clickX) < 8 && Math.abs(activeTouchTarget.y - clickY) < 8) {
+      setActiveTouchTarget(null);
+      if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
+      if (channelRef.current && currentUser) {
+        channelRef.current.send({ type: 'broadcast', event: 'touch-target-sync', payload: { peerId: currentUser.id, target: null } });
+      }
+      return;
+    }
+
+    if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
+
+    const newTarget: TouchTargetState = { x: Math.round(clickX), y: Math.round(clickY), isLoading: true };
+    setActiveTouchTarget(newTarget);
+    playTouchTone('start');
+    unlockSpeechSynthesisSynchronously();
+
+    if (channelRef.current && currentUser) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'touch-target-sync',
+        payload: { peerId: currentUser.id, target: newTarget }
+      });
+    }
+
+    captureFrameAndSendToAi(undefined, { x: newTarget.x, y: newTarget.y });
+  };
+
   const handleTapAndSpeakToggle = () => {
     if (isAiProcessing) return;
     unlockSpeechSynthesisSynchronously();
@@ -376,7 +428,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
         recorder.onstop = async () => {
           setIsVoiceRecording(false);
-          setTelemetryStatus('Evaluating visual parameters and question...');
+          setTelemetryStatus('Evaluating visual request...');
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -408,7 +460,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
-  const captureFrameAndSendToAi = (recordedAudioBase64?: string) => {
+  const captureFrameAndSendToAi = (recordedAudioBase64?: string, touchedCoords?: { x: number; y: number }) => {
     if (!localVideoRef.current || isAiProcessing) return;
 
     setIsAiProcessing(true);
@@ -416,7 +468,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       window.speechSynthesis.cancel();
     }
     setIsAiSpeaking(false);
-    setTelemetryStatus('Processing conversational answer right now...');
+    setTelemetryStatus(touchedCoords ? 'Scanning target item beneath crosshair...' : 'Processing conversational answer...');
 
     setTimeout(async () => {
       try {
@@ -446,18 +498,43 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             frameBase64: base64Frame,
             audioBase64: recordedAudioBase64 || null,
             questionText: recordedAudioBase64 ? undefined : "Describe literally what physical object appears across this picture out loud.",
+            touchTarget: touchedCoords || null,
             currentUserName: currentUser?.name || 'Anuj'
           })
         });
 
         const data = await response.json();
-        const reply = data.spokenReply || `I verified your visual capture directly right now!`;
+        const reply = data.spokenReply || `I verified your visual target right now!`;
+        const targetLabel = data.telemetry?.targetLabel || reply.split('.')[0] || 'Target Item';
 
         setIsAiProcessing(false);
         setIsAiSpeaking(true);
-        setTelemetryStatus(`Observation complete.`);
+        setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
-        const cleanLogSummary = `📸 AI Video Observation: "${reply}"`;
+        // UPDATE TOUCH TARGET WITH VERIFIED LABEL & 5-SECOND AUTO-FADE TIMER
+        if (touchedCoords) {
+          const resolvedTarget: TouchTargetState = { x: touchedCoords.x, y: touchedCoords.y, label: targetLabel, isLoading: false };
+          setActiveTouchTarget(resolvedTarget);
+          if (channelRef.current && currentUser) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'touch-target-sync',
+              payload: { peerId: currentUser.id, target: resolvedTarget }
+            });
+          }
+
+          if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
+          targetTimeoutRef.current = setTimeout(() => {
+            setActiveTouchTarget(null);
+            if (channelRef.current && currentUser) {
+              channelRef.current.send({ type: 'broadcast', event: 'touch-target-sync', payload: { peerId: currentUser.id, target: null } });
+            }
+          }, 5000);
+        }
+
+        const cleanLogSummary = touchedCoords
+          ? `🎯 Targeted Object Touch [X:${touchedCoords.x}%, Y:${touchedCoords.y}%]: "${reply}"`
+          : `📸 AI Video Observation: "${reply}"`;
         sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
 
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -479,6 +556,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const cleanupSession = () => {
     if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
     if (arSamplerIntervalRef.current) clearInterval(arSamplerIntervalRef.current);
+    if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try { mediaRecorderRef.current.stop(); } catch (err) { /* no-op */ }
     }
@@ -498,6 +576,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     setRemoteStreams([]);
     setIsTranslateArActive(false);
     setArTranslations([]);
+    setActiveTouchTarget(null);
   };
 
   const handleHangUp = () => {
@@ -517,7 +596,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           <span className="font-extrabold text-white text-xs sm:text-sm truncate">
             {groupTitle || 'Live Video Studio'}
           </span>
-          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-md hidden sm:block truncate max-w-[300px]">
+          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[340px]">
             {telemetryStatus}
           </span>
         </div>
@@ -550,8 +629,11 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       {/* SINGLE-SCREEN VIEWPORT FIT (`No bottom cropping`) */}
       <div className="w-full flex-1 min-h-0 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] p-2 sm:p-4 flex flex-col sm:flex-row gap-2.5 overflow-hidden relative">
         
-        {/* TILE 1: YOUR LIVE WEBCAM DISPLAY + AR OVERLAY */}
-        <div className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
+        {/* TILE 1: YOUR LIVE WEBCAM DISPLAY + TOUCH-TO-IDENTIFY SURFACE */}
+        <div
+          onClick={handleTouchIdentify}
+          className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end cursor-crosshair sm:cursor-pointer select-none"
+        >
           {videoDisabled ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400">
               <VideoOff className="w-12 h-12 text-slate-600" />
@@ -563,11 +645,34 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               autoPlay
               playsInline
               muted
-              className="absolute inset-0 w-full h-full object-cover transition duration-200"
+              className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           )}
 
-          {/* COMPREHENSIVE MULTI-SECTION OPTICAL OVERLAY CARD (`All Details right in 1 clean panel`) */}
+          {/* STEP 2: INTERACTIVE TOUCH-TO-IDENTIFY TARGET RING (`5-Second Auto-Fade`) */}
+          {activeTouchTarget && (
+            <div
+              style={{ left: `${activeTouchTarget.x}%`, top: `${activeTouchTarget.y}%`, transform: 'translate(-50%, -50%)' }}
+              className="absolute z-30 flex flex-col items-center pointer-events-none animate-in zoom-in-75 duration-200"
+            >
+              <div className="w-11 h-11 rounded-full border-2 border-amber-400 bg-amber-400/25 ring-4 ring-amber-400/30 animate-ping absolute inset-0" />
+              <div className="w-11 h-11 rounded-full border-2 border-white flex items-center justify-center bg-black/45 backdrop-blur-xs relative shadow-2xl">
+                <span className="text-sm">🎯</span>
+              </div>
+              
+              {activeTouchTarget.isLoading ? (
+                <span className="mt-1.5 bg-slate-900/90 text-amber-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xl whitespace-nowrap">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Identifying...
+                </span>
+              ) : activeTouchTarget.label ? (
+                <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex items-center gap-1.5">
+                  <span className="text-amber-400">🎯</span> {activeTouchTarget.label}
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          {/* COMPREHENSIVE MULTI-SECTION OPTICAL OVERLAY CARD (`All Details in 1 clean panel`) */}
           {arTranslations.slice(0, 1).map((item, idx) => (
             <div
               key={idx}
@@ -603,7 +708,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             </div>
           ))}
 
-          <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5">
+          <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5 pointer-events-none">
             <span className="w-2 h-2 bg-emerald-400 rounded-full shrink-0 animate-pulse" />
             <span className="text-[11px] font-black text-white truncate">
               {currentUser?.name || 'You'}
@@ -612,9 +717,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           </div>
         </div>
 
-        {/* TILE 2+: REMOTE PEER VIDEO TRACKS + TARGETED PEER AR OVERLAY */}
+        {/* TILE 2+: REMOTE PEER VIDEO TRACKS + TARGETED AR & TOUCH OVERLAYS */}
         {remoteStreams.map(peer => {
           const peerArItems = remoteArMap[peer.peerId] || [];
+          const peerTouchTarget = remoteTouchMap[peer.peerId];
 
           return (
             <div key={peer.peerId} className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end">
@@ -627,8 +733,31 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 }}
                 autoPlay
                 playsInline
-                className="absolute inset-0 w-full h-full object-cover transition duration-200"
+                className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
               />
+
+              {/* REMOTE PEER TOUCH TARGET RING (`Synced exclusively over scanning peer's tile`) */}
+              {peerTouchTarget && (
+                <div
+                  style={{ left: `${peerTouchTarget.x}%`, top: `${peerTouchTarget.y}%`, transform: 'translate(-50%, -50%)' }}
+                  className="absolute z-30 flex flex-col items-center pointer-events-none animate-in zoom-in-75 duration-200"
+                >
+                  <div className="w-11 h-11 rounded-full border-2 border-amber-400 bg-amber-400/25 ring-4 ring-amber-400/30 animate-ping absolute inset-0" />
+                  <div className="w-11 h-11 rounded-full border-2 border-white flex items-center justify-center bg-black/45 backdrop-blur-xs relative shadow-2xl">
+                    <span className="text-sm">🎯</span>
+                  </div>
+                  
+                  {peerTouchTarget.isLoading ? (
+                    <span className="mt-1.5 bg-slate-900/90 text-amber-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xl whitespace-nowrap">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Identifying...
+                    </span>
+                  ) : peerTouchTarget.label ? (
+                    <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex items-center gap-1.5">
+                      <span className="text-amber-400">🎯</span> {peerTouchTarget.label}
+                    </span>
+                  ) : null}
+                </div>
+              )}
 
               {/* TARGETED PEER AR OVERLAY (EXCLUSIVELY OVER SCANNING PEER'S TILE) */}
               {peerArItems.slice(0, 1).map((item, idx) => (
@@ -666,7 +795,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 </div>
               ))}
 
-              <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5">
+              <div className="relative z-10 m-2.5 p-1.5 px-3 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 w-fit flex items-center gap-1.5 pointer-events-none">
                 <span className="w-2 h-2 bg-brand-400 rounded-full shrink-0 animate-pulse" />
                 <span className="text-[11px] font-black text-white truncate">
                   {peer.peerName}
@@ -719,7 +848,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-gradient-to-tr from-[#4285F4] via-[#34A853] to-[#FBBC05] text-white border-white ring-2 ring-[#4285F4] animate-pulse'
               : 'bg-slate-800 text-slate-200 border-slate-700 hover:text-white'
           }`}
-          title="Toggle Real-Time AR Visual Translate over non-English labels & currency"
+          title="Toggle Real-Time AR Visual Translate right over non-English labels"
         >
           <Globe className="w-5 h-5 text-amber-300" />
         </button>
@@ -734,7 +863,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-rose-600 ring-4 ring-rose-400 text-white animate-bounce'
               : 'bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 text-white hover:opacity-95'
           }`}
-          title="Tap to speak your question aloud right right and tap again right when done"
+          title="Tap to speak your question aloud and tap again when done"
         >
           {isAiProcessing ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Sparkles className="w-6 h-6 text-white" />}
         </button>
@@ -743,7 +872,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           type="button"
           onClick={handleHangUp}
           className="p-3.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center border border-rose-500 shadow-xl active:scale-95"
-          title="End Call and save summary notes straight into chat"
+          title="End Call and save clean summary notes into group chat timeline"
         >
           <PhoneOff className="w-5 h-5 text-white" />
         </button>
