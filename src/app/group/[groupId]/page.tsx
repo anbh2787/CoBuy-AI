@@ -904,7 +904,7 @@ export default function GroupChatRoom({ params }: PageProps) {
                       </div>
                     )}
 
-                    <div className="whitespace-pre-wrap font-sans leading-relaxed text-[#22252A]">
+                    <div className={`whitespace-pre-wrap font-sans leading-relaxed ${isMe ? 'text-white font-extrabold' : 'text-[#22252A] font-medium'}`}>
                       {msg.content.replace(/\*\*/g, '').replace(/```[a-z]*\n[\s\S]*?\n```/g, '').replace(/<!--SHOPPY_DATA:[\s\S]*?-->/g, '')}
                     </div>
 
@@ -1016,7 +1016,7 @@ export default function GroupChatRoom({ params }: PageProps) {
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Message room..."
-                className="w-full bg-white border border-amber-900/15 rounded-2xl px-4 py-3 text-sm text-[#22252A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition font-sans shadow-xs"
+                className="w-full bg-white border border-amber-900/25 rounded-2xl px-4 py-3 text-sm text-[#22252A] font-bold placeholder:text-slate-400 placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-[#2B4C7E] transition font-sans shadow-sm"
               />
             </div>
 
