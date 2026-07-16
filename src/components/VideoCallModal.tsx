@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
-import { Mic, MicOff, Video, VideoOff, RefreshCw, Sparkles, PhoneOff, Volume2, Loader2, Users, Globe, Activity } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, RefreshCw, Sparkles, PhoneOff, Volume2, Loader2, Users, Globe, Activity, MessageSquare } from 'lucide-react';
 
 interface VideoCallModalProps {
   isOpen: boolean;
@@ -12,6 +12,8 @@ interface VideoCallModalProps {
   groupTitle: string;
   currentUser: User | null;
   roomMembers: User[];
+  messages?: any[];
+  onSendMessage?: (text: string) => void;
 }
 
 interface ARTranslationItem {
@@ -39,7 +41,7 @@ interface RcaLogEntry {
   details: string;
 }
 
-export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers }: VideoCallModalProps) {
+export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers, messages, onSendMessage }: VideoCallModalProps) {
   const [audioMuted, setAudioMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -57,6 +59,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   // STEP 2 & 3: LOCAL + REMOTE TOUCH TARGET BOUNDING STATE
   const [activeTouchTarget, setActiveTouchTarget] = useState<TouchTargetState | null>(null);
   const [remoteTouchMap, setRemoteTouchMap] = useState<Record<string, TouchTargetState | null>>({});
+
+  // STEP 4: IMMERSIVE FULL-SCREEN TRANSLUCENT CHAT DRAWER STATE
+  const [isChatOverlayOpen, setIsChatOverlayOpen] = useState(false);
+  const [drawerInput, setDrawerInput] = useState('');
 
   // DIAGNOSTIC WEBRTC INSTRUMENTATION & RCA PANEL STATE
   const [rcaLogs, setRcaLogs] = useState<RcaLogEntry[]>([]);
@@ -322,7 +328,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED' && currentUser) {
-          logRcaInstrument('CHANNEL_SUCCEEDED', `Signaling subscribed right inside room webrtc_call_${groupId}. Announcing presence right via peer-join...`);
+          logRcaInstrument('CHANNEL_SUCCEEDED', `Signaling subscribed directly inside room webrtc_call_${groupId}. Announcing presence right via peer-join...`);
           channel.send({
             type: 'broadcast',
             event: 'peer-join',
@@ -347,7 +353,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     peerConnectionsRef.current.set(remoteUserId, pc);
 
     pc.onconnectionstatechange = () => {
-      logRcaInstrument('CONN_STATE', `Link with ${remoteUserName} changed to ${pc.connectionState}`);
+      logRcaInstrument('CONN_STATE', `Link right with ${remoteUserName} changed to ${pc.connectionState}`);
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         logRcaInstrument('RCA_RECOVERY', `Connection dropped with ${remoteUserName}. Retrying connection cleanup right now.`);
       }
@@ -357,9 +363,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
       });
-      logRcaInstrument('TRACKS_ATTACHED', `Attached ${localStreamRef.current.getTracks().length} physical video/audio tracks right to ${remoteUserName}.`);
+      logRcaInstrument('TRACKS_ATTACHED', `Attached ${localStreamRef.current.getTracks().length} physical video/audio tracks straight to ${remoteUserName}.`);
     } else {
-      logRcaInstrument('RCA_ERROR', `createPeerConnection run while localStreamRef has zero active tracks right right for ${remoteUserName}!`);
+      logRcaInstrument('RCA_ERROR', `createPeerConnection run while localStreamRef has zero active tracks for ${remoteUserName}!`);
     }
 
     pc.onicecandidate = (e) => {
@@ -375,7 +381,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     pc.ontrack = (e) => {
       const stream = e.streams[0];
       if (stream) {
-        logRcaInstrument('REMOTE_TRACK_RECEIVED', `Received active live video track right from peer ${remoteUserName}! Displaying across tile right now.`);
+        logRcaInstrument('REMOTE_TRACK_RECEIVED', `Received active live video track straight from peer ${remoteUserName}! Displaying across tile right now.`);
         setRemoteStreams(prev => {
           const filtered = prev.filter(s => s.peerId !== remoteUserId);
           return [...filtered, { peerId: remoteUserId, peerName: remoteUserName, stream }];
@@ -392,7 +398,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           payload: { targetId: remoteUserId, senderId: currentUser.id, senderName: currentUser.name, offer }
         });
       }).catch(err => {
-        logRcaInstrument('SDP_OFFER_ERROR', `Failed generating offer for ${remoteUserName}: ${err?.message}`);
+        logRcaInstrument('SDP_OFFER_ERROR', `Failed generating offer right for ${remoteUserName}: ${err?.message}`);
       });
     }
 
@@ -747,7 +753,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
 
     if (channelRef.current && currentUser) {
-      logRcaInstrument('PEER_LEAVE_TRANSMIT', 'Sending peer-leave explicit disconnect broadcast prior right to cleanup');
+      logRcaInstrument('PEER_LEAVE_TRANSMIT', 'Sending peer-leave explicit disconnect broadcast prior to cleanup');
       try {
         channelRef.current.send({
           type: 'broadcast',
@@ -785,19 +791,32 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   return (
     <div className="fixed inset-0 z-[170] bg-slate-950 flex flex-col justify-between overflow-hidden animate-in fade-in duration-150">
       
-      {/* MINIMALIST HEADER BAR (`Zero Verbosity + Diagnostic RCA Inspector`) */}
+      {/* MINIMALIST HEADER BAR (`Zero Verbosity + Diagnostic RCA & Chat Overlay Drawer`) */}
       <div className="bg-slate-900 border-b border-slate-800 px-3.5 py-2.5 flex items-center justify-between shrink-0 shadow-lg z-30">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shrink-0" />
           <span className="font-extrabold text-white text-xs sm:text-sm truncate">
             {groupTitle || 'Live Video Studio'}
           </span>
-          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden sm:block truncate max-w-[340px]">
+          <span className="text-[10px] font-mono text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-md hidden md:block truncate max-w-[280px]">
             {telemetryStatus}
           </span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* STEP 4: TRANSLUCENT FROSTED CHAT OVERLAY TOGGLE */}
+          <button
+            type="button"
+            onClick={() => setIsChatOverlayOpen(!isChatOverlayOpen)}
+            className={`text-[11px] font-extrabold px-2.5 py-1 rounded-xl border flex items-center gap-1.5 transition shadow-md active:scale-95 ${
+              isChatOverlayOpen ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 border-emerald-400 font-black' : 'bg-slate-800 text-white border-slate-700 hover:bg-slate-750'
+            }`}
+            title="Toggle Translucent Frosted-Glass Chat Drawer over Video"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Chat ({messages?.length || 0})</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowRcaPanel(!showRcaPanel)}
@@ -806,7 +825,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             }`}
             title="Inspect Factual WebRTC RCA Instrumentation Telemetry Logs"
           >
-            <Activity className="w-3.5 h-3.5 text-brand-400" /> RCA Logs ({rcaLogs.length})
+            <Activity className="w-3.5 h-3.5 text-brand-400" /> RCA ({rcaLogs.length})
           </button>
 
           {isTranslateArActive ? (
@@ -835,13 +854,13 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
       {/* EXPANDABLE DIAGNOSTIC FACTUAL RCA PANEL */}
       {showRcaPanel && (
-        <div className="bg-slate-900/95 backdrop-blur-xl border-b border-slate-700 max-h-56 overflow-y-auto px-4 py-3 z-40 shrink-0 text-xs font-mono text-slate-200 shadow-2xl animate-in slide-in-from-top-3 duration-150">
+        <div className="bg-slate-900/95 backdrop-blur-xl border-b border-slate-700 max-h-56 overflow-y-auto px-4 py-3 z-50 shrink-0 text-xs font-mono text-slate-200 shadow-2xl animate-in slide-in-from-top-3 duration-150">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2 font-black text-white">
             <span>🔬 FACTUAL WEBRTC RCA DIAGNOSTIC TELEMETRY LOG</span>
             <button type="button" onClick={() => setShowRcaPanel(false)} className="text-slate-400 hover:text-white font-sans text-xs">✕ Close Panel</button>
           </div>
           {rcaLogs.length === 0 ? (
-            <p className="text-slate-400 italic py-1">No diagnostic connection events recorded inside this session right yet.</p>
+            <p className="text-slate-400 italic py-1">No diagnostic connection events recorded right inside this session yet.</p>
           ) : (
             <div className="space-y-1">
               {rcaLogs.map((log, index) => (
@@ -851,6 +870,51 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* STEP 4: FULL-SCREEN IMMERSIVE TRANSLUCENT FROSTED CHAT DRAWER */}
+      {isChatOverlayOpen && (
+        <div className="absolute right-0 sm:right-3 top-12 sm:top-14 bottom-16 sm:bottom-20 w-full sm:w-[380px] bg-slate-950/85 backdrop-blur-2xl sm:rounded-3xl border-l sm:border sm:border-slate-700/80 shadow-2xl z-40 flex flex-col overflow-hidden animate-in slide-in-from-right-3 duration-200 pointer-events-auto">
+          <div className="p-3 border-b border-slate-800 flex items-center justify-between font-black text-white text-xs bg-slate-900/60 shrink-0">
+            <span className="flex items-center gap-1.5 text-amber-300">💬 Immersive Studio Timeline</span>
+            <button type="button" onClick={() => setIsChatOverlayOpen(false)} className="text-slate-400 hover:text-white p-1 text-xs">✕ Close</button>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-3 font-sans">
+            {(!messages || messages.length === 0) && (
+              <p className="text-xs text-slate-400 italic text-center py-8">No messages in this workspace yet. Touch objects across video or type below!</p>
+            )}
+            {(messages || []).map((m: any) => (
+              <div key={m.id} className={`flex flex-col ${m.senderId === currentUser?.id ? 'items-end' : 'items-start'}`}>
+                <span className="text-[10px] font-bold text-slate-400 mb-0.5 truncate max-w-[200px]">{m.senderName}</span>
+                <div className={`p-3 rounded-2xl text-xs font-semibold max-w-[88%] leading-relaxed shadow-lg ${m.senderId === currentUser?.id ? 'bg-[#2B4C7E] text-white rounded-tr-none' : 'bg-slate-800 border border-slate-700 text-white rounded-tl-none'}`}>
+                  <div className="whitespace-pre-wrap">{m.content ? m.content.replace(/<!--SHOPPY_DATA:[\s\S]*?-->/g, '') : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {onSendMessage && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!drawerInput.trim()) return;
+                onSendMessage(drawerInput.trim());
+                setDrawerInput('');
+              }}
+              className="p-2.5 bg-slate-900/90 border-t border-slate-800 flex gap-2 shrink-0"
+            >
+              <input
+                type="text"
+                value={drawerInput}
+                onChange={(e) => setDrawerInput(e.target.value)}
+                placeholder="Message while on camera..."
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400 transition"
+              />
+              <button type="submit" disabled={!drawerInput.trim()} className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-xs transition disabled:opacity-40 active:scale-95 shadow-md">Send</button>
+            </form>
           )}
         </div>
       )}
@@ -970,7 +1034,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
               />
 
-              {/* STEP 3 REMOTE PEER TOUCH TARGET RING (`Synced across room`) */}
+              {/* STEP 3 REMOTE PEER TOUCH TARGET RING */}
               {peerTouchTarget && (
                 <div
                   style={{ left: `${peerTouchTarget.x}%`, top: `${peerTouchTarget.y}%`, transform: 'translate(-50%, -50%)' }}
@@ -1098,7 +1162,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               ? 'bg-rose-600 ring-4 ring-rose-400 text-white animate-bounce'
               : 'bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 text-white hover:opacity-95'
           }`}
-          title="Tap to speak your question aloud and tap again right right when done"
+          title="Tap to speak your question aloud and tap again right right right when done"
         >
           {isAiProcessing ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Sparkles className="w-6 h-6 text-white" />}
         </button>
@@ -1107,7 +1171,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           type="button"
           onClick={handleHangUp}
           className="p-3.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center border border-rose-500 shadow-xl active:scale-95"
-          title="End Call and save clean summary notes straight right right right into group chat timeline"
+          title="End Call and save clean summary notes into group chat timeline"
         >
           <PhoneOff className="w-5 h-5 text-white" />
         </button>

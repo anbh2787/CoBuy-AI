@@ -1076,6 +1076,11 @@ export default function GroupChatRoom({ params }: PageProps) {
         groupTitle={group.title}
         currentUser={currentUser}
         roomMembers={group.members}
+        messages={group.messages}
+        onSendMessage={(txt) => {
+          setMessageInput(txt);
+          setTimeout(() => handleSendMessage({ preventDefault: () => {} } as React.FormEvent), 15);
+        }}
       />
 
       {/* FULL-SCREEN IMMERSIVE PHOTO & PDF DOCUMENT LIGHTBOX VIEWER */}
