@@ -221,22 +221,55 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } catch (e) { /* no-op */ }
   };
 
-  const speakWithHumanVoice = (text: string, onFinish?: () => void) => {
+  const speakWithHumanVoice = async (text: string, onFinish?: () => void) => {
     try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      if (typeof window === 'undefined') return;
+      
+      // Attempt immediate High-Def Cloud MP3 Audio Stream (`Zero Monotone OS limitations`)
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.audioUrl) {
+            const audio = new Audio(data.audioUrl);
+            audio.onended = () => { if (onFinish) onFinish(); };
+            audio.onerror = () => { fallbackToWebSpeech(text, onFinish); };
+            await audio.play();
+            return;
+          }
+        }
+      } catch (networkErr) {
+        console.warn("Cloud high-def TTS unreachable, applying high-fidelity local voice fallback right now:", networkErr);
+      }
+
+      fallbackToWebSpeech(text, onFinish);
+    } catch (e) {
+      if (onFinish) onFinish();
+    }
+  };
+
+  const fallbackToWebSpeech = (text: string, onFinish?: () => void) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        if (onFinish) onFinish();
+        return;
+      }
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       const voices = window.speechSynthesis.getVoices();
-      
-      const humanVoice = voices.find(v => v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google US English') || v.name.includes('Google UK English Female') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('Aria') || v.name.includes('Karen')) || voices.find(v => v.lang.startsWith('en') && !v.name.includes('Desktop')) || voices[0];
+      const humanVoice = voices.find(v => v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('Aria')) || voices.find(v => v.lang.startsWith('en') && !v.name.includes('Desktop')) || voices[0];
       if (humanVoice) utterance.voice = humanVoice;
-
-      utterance.rate = 1.04;
+      utterance.rate = 1.05;
       utterance.pitch = 1.02;
       utterance.onend = () => { if (onFinish) onFinish(); };
       utterance.onerror = () => { if (onFinish) onFinish(); };
       window.speechSynthesis.speak(utterance);
-    } catch (e) {
+    } catch (err) {
       if (onFinish) onFinish();
     }
   };
