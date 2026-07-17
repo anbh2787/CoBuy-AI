@@ -221,6 +221,26 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     } catch (e) { /* no-op */ }
   };
 
+  const speakWithHumanVoice = (text: string, onFinish?: () => void) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      
+      const humanVoice = voices.find(v => v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google US English') || v.name.includes('Google UK English Female') || v.name.includes('Samantha') || v.name.includes('Jenny') || v.name.includes('Aria') || v.name.includes('Karen')) || voices.find(v => v.lang.startsWith('en') && !v.name.includes('Desktop')) || voices[0];
+      if (humanVoice) utterance.voice = humanVoice;
+
+      utterance.rate = 1.04;
+      utterance.pitch = 1.02;
+      utterance.onend = () => { if (onFinish) onFinish(); };
+      utterance.onerror = () => { if (onFinish) onFinish(); };
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      if (onFinish) onFinish();
+    }
+  };
+
   const startLocalWebcam = async (mode: 'user' | 'environment'): Promise<boolean> => {
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -563,14 +583,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         const cleanLogSummary = `🎯 Targeted Item straight across ${remotePeerName}'s Video: "${reply}"`;
         sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
 
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(reply);
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          utterance.onend = () => setIsAiSpeaking(false);
-          utterance.onerror = () => setIsAiSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-        }
+        speakWithHumanVoice(reply, () => setIsAiSpeaking(false));
       } catch (err: any) {
         setIsAiProcessing(false);
         console.warn('Remote video check warning:', err);
@@ -728,14 +741,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           : `📸 AI Video Observation: "${reply}"`;
         sessionNotesRef.current = [...sessionNotesRef.current, cleanLogSummary];
 
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance(reply);
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          utterance.onend = () => setIsAiSpeaking(false);
-          utterance.onerror = () => setIsAiSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-        }
+        speakWithHumanVoice(reply, () => setIsAiSpeaking(false));
       } catch (err: any) {
         console.error('Frame check exception:', err);
         setIsAiProcessing(false);
