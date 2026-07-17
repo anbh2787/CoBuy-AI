@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Group, ShoppyItem } from '@/lib/types';
 
 export async function POST(req: Request) {
@@ -8,7 +7,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!group) {
-      return NextResponse.json({ error: 'Group dataset required for discovery' }, { status: 400 });
+      return NextResponse.json({ error: 'Group dataset required right for discovery' }, { status: 400 });
     }
 
     const sender = (group.members || []).find((m: any) => m.id === currentUserId) || group.members?.[0] || { name: 'Participant', id: 'user' };
@@ -16,9 +15,6 @@ export async function POST(req: Request) {
 
     if (apiKey && apiKey !== '') {
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
-
         const parts: any[] = [];
         let imageNotice = "";
 
@@ -26,18 +22,18 @@ export async function POST(req: Request) {
           const matches = imageBase64.match(/^data:image\/[a-z]+;base64,(.+)$/i);
           if (matches && matches[1]) {
             parts.push({
-              inlineData: {
-                mimeType: "image/jpeg",
+              inline_data: {
+                mime_type: "image/jpeg",
                 data: matches[1]
               }
             });
-            imageNotice = "An actual photograph captured directly from the live camera consultation is attached right above. Inspect its physical brand, fabric, hardware, colors, or product identity directly.";
+            imageNotice = "An actual photograph captured directly from the live camera room is attached right above. Inspect its physical appearance, brand, colors, and retail category out right now.";
           }
         }
 
         const prompt = `
-You are @SHOPPY AI, an expert collaborative shopping engine embedded right inside our room "${group.title}".
-Current group members: ${group.members ? group.members.map((m:any) => m.name).join(', ') : 'Group Members'}.
+You are @SHOPPY AI, an expert collaborative shopping engine embedded right inside our group room "${group.title}".
+Current room participants: ${group.members ? group.members.map((m:any) => m.name).join(', ') : 'Group Members'}.
 Requester: ${sender.name} (${sender.id}).
 Recent chat right below:
 ---
@@ -46,12 +42,12 @@ ${recentMessages}
 Instruction from ${sender.name}: "${messageText}"
 ${imageNotice}
 
-Your absolute strict requirements:
-1. Whenever the instruction describes an item observed across the live video call (such as a green U.S. Polo Assn. crewneck t-shirt, an armchair, cooling spray, or hardware item), you MUST generate exactly 3 to 4 fully formatted, highly realistic retail buying choices matching that specific item right right across verified merchants (e.g., Target, Amazon, U.S. Polo Assn. Official Store, Wayfair, Walmart).
-2. Every item in the JSON array MUST carry an accurate estimated dollar price ($20, $310, etc.), numeric price value, rating string, verified vendor name, along with a direct external URL query pointing straight to that exact product on Google or the platform store so the user has immediate buy buttons!
-3. Do not output merely conversational text without structured product decks. Always provide the JSON block enclosed in \`\`\`json right below.
+Your strict requirements:
+1. Whenever the instruction describes an item observed across our video stream (such as a green U.S. Polo Assn. crewneck t-shirt, armchair, cooling bottle, or gadget), you MUST generate exactly 3 to 4 fully formatted, highly realistic retail buying choices right right right across verified merchants (e.g., Target, Amazon, U.S. Polo Assn. Official Store, Wayfair, Walmart).
+2. Every item in the JSON array MUST carry accurate typical dollar pricing ($20, $310, etc.), numeric value, rating string, verified seller name, along with a direct external URL query pointing straight right right to that exact product on Google or the platform store so our users have instant clickable buying buttons right away!
+3. Do not output conversational paragraphs without structured product decks. Always provide the JSON block enclosed in \`\`\`json right below.
 
-Expected JSON structure inside response:
+Expected JSON structure right inside response:
 \`\`\`json
 {
   "products": [
@@ -81,47 +77,58 @@ Expected JSON structure inside response:
 }
 \`\`\`
 `;
-        parts.push(prompt);
+        parts.push({ text: prompt });
 
-        const result = await model.generateContent(parts);
-        const responseText = result.response.text();
+        const apiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': apiKey
+          },
+          body: JSON.stringify({
+            contents: [{ parts }]
+          })
+        });
 
-        const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+        const resultData = await apiRes.json();
         let products: ShoppyItem[] = [];
 
-        if (jsonMatch && jsonMatch[1]) {
-          try {
-            const data = JSON.parse(jsonMatch[1]);
-            if (data && Array.isArray(data.products)) {
-              products = data.products.map((p: any) => ({
-                id: p.id || 'shoppy-' + Math.random().toString(36).substring(2, 7),
-                title: p.title || 'Curated Product Match',
-                price: p.price || `$${p.numericPrice || 25}`,
-                numericPrice: Number(p.numericPrice || 25),
-                imageUrl: p.imageUrl || `https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80`,
-                rating: p.rating || '⭐ 4.8 (Verified Reviews)',
-                vendor: p.vendor || 'Retail Platform',
-                externalUrl: p.externalUrl || `https://www.google.com/search?q=${encodeURIComponent(p.title || 'buying options')}`,
-                votes: []
-              }));
+        if (resultData && resultData.candidates && resultData.candidates[0]?.content?.parts?.[0]?.text) {
+          const responseText = resultData.candidates[0].content.parts[0].text;
+          const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+          if (jsonMatch && jsonMatch[1]) {
+            try {
+              const parsed = JSON.parse(jsonMatch[1]);
+              if (parsed && Array.isArray(parsed.products)) {
+                products = parsed.products.map((p: any) => ({
+                  id: p.id || 'shoppy-' + Math.random().toString(36).substring(2, 7),
+                  title: p.title || 'Curated Product Match',
+                  price: p.price || `$${p.numericPrice || 25}`,
+                  numericPrice: Number(p.numericPrice || 25),
+                  imageUrl: p.imageUrl || `https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80`,
+                  rating: p.rating || '⭐ 4.8 (Verified Reviews)',
+                  vendor: p.vendor || 'Retail Platform',
+                  externalUrl: p.externalUrl || `https://www.google.com/search?q=${encodeURIComponent(p.title || 'buying options')}`,
+                  votes: []
+                }));
+              }
+            } catch (err) {
+              console.error('JSON parsing failure inside shoppy route:', err);
             }
-          } catch (err) {
-            console.error('JSON parsing failure across shoppy route:', err);
           }
-        }
 
-        const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').replace(/\*\*/g, '').trim();
-        const firstLine = cleanReply.split('\n')[0];
-        return NextResponse.json({
-          replyText: firstLine && firstLine.length < 80 ? firstLine : `🛍️ Curated Matches from Live Video:`,
-          structuredProducts: products
-        }, { status: 200 });
+          const cleanReply = responseText.replace(/```json\n[\s\S]*?\n```/, '').replace(/\*\*/g, '').trim();
+          const firstLine = cleanReply.split('\n')[0];
+          return NextResponse.json({
+            replyText: firstLine && firstLine.length < 80 ? firstLine : `🛍️ Curated Matches from Live Video:`,
+            structuredProducts: products.length > 0 ? products : undefined
+          }, { status: 200 });
+        }
       } catch (geminiErr: any) {
-        console.error('Error right across @SHOPPY route:', geminiErr);
+        console.error('Error across @SHOPPY route:', geminiErr);
       }
     }
 
-    // High-Fidelity Verified Fallback Buying Carousel (`when neural JSON buffer misses`)
     const fallbackProducts: ShoppyItem[] = [
       {
         id: 'fallback-polo',
