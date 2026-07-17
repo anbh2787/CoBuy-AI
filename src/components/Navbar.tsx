@@ -84,7 +84,7 @@ export default function Navbar() {
               <Sparkles className="w-5 h-5 text-[#D99B26]" />
             </div>
             <span className="font-extrabold text-[#22252A] text-lg tracking-tight">
-              Google <span className="text-[#2B4C7E]">CoBuy AI</span>
+              CoBuy <span className="text-[#2B4C7E]">AI</span>
             </span>
           </Link>
 

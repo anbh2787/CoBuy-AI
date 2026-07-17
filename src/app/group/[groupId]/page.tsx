@@ -761,7 +761,7 @@ export default function GroupChatRoom({ params }: PageProps) {
           <div className="bg-gradient-to-r from-[#2B4C7E] via-[#3B5998] to-[#4A7C59] p-2.5 px-4 text-white font-extrabold text-xs flex items-center justify-between shadow-md animate-in slide-in-from-top duration-200 z-40">
             <span className="flex items-center gap-2 truncate">
               <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping shrink-0" />
-              <span>🟢 Live Google CoBuy Studio Active inside this Workspace!</span>
+              <span>🟢 Live CoBuy AI Studio Active inside this Workspace!</span>
             </span>
             <button
               onClick={() => setIsVideoCallOpen(true)}
@@ -784,7 +784,7 @@ export default function GroupChatRoom({ params }: PageProps) {
                 <span className="truncate">{group.title}</span>
               </h1>
               <span className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5 font-bold">
-                <Users className="w-3.5 h-3.5 text-[#2B4C7E] shrink-0" /> {group.members.length} members connected across Google CoBuy
+                <Users className="w-3.5 h-3.5 text-[#2B4C7E] shrink-0" /> {group.members.length} members connected across CoBuy AI
               </span>
             </div>
           </div>

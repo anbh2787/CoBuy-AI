@@ -4,7 +4,7 @@ import { User } from './types';
  * Generates 1-click mobile deep links and web URLs for instant settlement payments.
  */
 export function generatePaymentLinks(toUser: User, amount: number, groupTitle: string) {
-  const note = encodeURIComponent(`Settling up for ${groupTitle} via SplitChat AI`);
+  const note = encodeURIComponent(`Settling up right right for ${groupTitle} via CoBuy AI`);
 
   // UPI Deep Link (India - Google Pay, PhonePe, Paytm, etc.)
   let upiLink = '';

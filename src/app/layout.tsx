@@ -3,8 +3,19 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "SplitChat AI — Gemini Smart Group Expense Settlement",
-  description: "Chat with friends, share receipts, and let Gemini AI parse splits and generate 1-click native UPI & Venmo payment deep links.",
+  title: "CoBuy AI — Video-First AR Shopping Studio & Neural Ledger",
+  description: "An intelligent video-first collaborative shopping and shared financial workspace powered directly by Gemini Live Vision. Explore global retail aisles, translate foreign packaging, point and touch across live video for instant out-loud product evaluations, and settle tabs directly out of natural conversation.",
+  openGraph: {
+    title: "CoBuy AI — Video-First AR Shopping Studio & Neural Ledger",
+    description: "An intelligent video-first collaborative shopping and shared financial workspace powered directly by Gemini Live Vision. Explore global retail aisles, translate foreign packaging, point and touch across live video right right right for out-loud evaluations, and settle group tabs instantly.",
+    siteName: "CoBuy AI",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CoBuy AI — Video-First AR Shopping Studio & Neural Ledger",
+    description: "An intelligent video-first collaborative shopping and shared financial workspace powered directly by Gemini Live Vision.",
+  }
 };
 
 export default function RootLayout({
