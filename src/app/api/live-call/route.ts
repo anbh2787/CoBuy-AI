@@ -80,6 +80,8 @@ Strict conversational rules for spoken voice delivery:
           const targetLabel = labelMatch ? labelMatch[1].trim() : undefined;
           const cleanSpoken = responseText.replace(/\[LABEL:\s*[^\]]+\]/i, '').replace(/[*#_`~]/g, '').trim();
 
+          console.log(`[GEMINI-LIVE-LOG] User: "${currentUserName || 'Anuj'}" | Question: "${questionText || (audioBase64 ? 'Voice Recording Uploaded' : 'Visual Scan')}" | Answer: "${cleanSpoken}"`);
+
           return NextResponse.json({
             spokenReply: cleanSpoken || `I verified the targeted visual item across our studio right now!`,
             telemetry: {
