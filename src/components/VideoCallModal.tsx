@@ -63,6 +63,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   // STEP 4: IMMERSIVE FULL-SCREEN TRANSLUCENT CHAT DRAWER STATE
   const [isChatOverlayOpen, setIsChatOverlayOpen] = useState(false);
   const [drawerInput, setDrawerInput] = useState('');
+  const [studioQuestionInput, setStudioQuestionInput] = useState('');
+  const [studioAiAnswer, setStudioAiAnswer] = useState<string | null>(null);
 
   // DIAGNOSTIC WEBRTC INSTRUMENTATION & RCA PANEL STATE
   const [rcaLogs, setRcaLogs] = useState<RcaLogEntry[]>([]);
@@ -281,12 +283,26 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(t => t.stop());
+          localStreamRef.current.getTracks().forEach(t => {
+            try { t.stop(); } catch (e) {}
+          });
+          localStreamRef.current = null;
+          if (localVideoRef.current) localVideoRef.current.srcObject = null;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true
-        });
+        await new Promise(r => setTimeout(r, 350));
+
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true
+          });
+        } catch (exactErr) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true
+          });
+        }
         localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
@@ -701,7 +717,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
-  const captureFrameAndSendToAi = (recordedAudioBase64?: string, touchedCoords?: { x: number; y: number }) => {
+  const captureFrameAndSendToAi = (recordedAudioBase64?: string, touchedCoords?: { x: number; y: number }, customQ?: string) => {
     if (!localVideoRef.current || isAiProcessing) return;
 
     setIsAiProcessing(true);
@@ -709,7 +725,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       window.speechSynthesis.cancel();
     }
     setIsAiSpeaking(false);
-    setTelemetryStatus(touchedCoords ? 'Scanning target item beneath crosshair...' : 'Processing conversational answer...');
+    setStudioAiAnswer(null);
+    setTelemetryStatus(touchedCoords ? 'Scanning target item beneath crosshair...' : (customQ ? `Consulting Google AI: "${customQ}"...` : 'Processing conversational answer...'));
 
     setTimeout(async () => {
       try {
@@ -738,7 +755,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           body: JSON.stringify({
             frameBase64: base64Frame,
             audioBase64: recordedAudioBase64 || null,
-            questionText: recordedAudioBase64 ? undefined : "Describe what physical object appears right inside this picture out loud.",
+            questionText: recordedAudioBase64 ? undefined : (customQ || "Describe what physical object appears right inside this picture out loud."),
             touchTarget: touchedCoords || null,
             currentUserName: currentUser?.name || 'Anuj'
           })
@@ -750,6 +767,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
         setIsAiProcessing(false);
         setIsAiSpeaking(true);
+        setStudioAiAnswer(reply);
         setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
         if (touchedCoords) {
@@ -784,6 +802,14 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setTelemetryStatus('Scan verification exception: ' + (err?.message || 'timeout'));
       }
     }, 110);
+  };
+
+  const handleStudioAskGoogle = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!studioQuestionInput.trim() || isAiProcessing) return;
+    const q = studioQuestionInput.trim();
+    setStudioQuestionInput('');
+    captureFrameAndSendToAi(undefined, undefined, q);
   };
 
   const cleanupSession = () => {
@@ -1146,6 +1172,44 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           );
         })}
       </div>
+
+      {/* AI ANSWER DISPLAY CARD IN STUDIO ROOM */}
+      {studioAiAnswer && (
+        <div className="mx-4 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl flex flex-col gap-1 text-left shrink-0 z-30 animate-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+            <span className="font-black text-xs text-amber-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Google Gemini Answer
+            </span>
+            <button onClick={() => setStudioAiAnswer(null)} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
+          </div>
+          <p className="text-xs font-semibold leading-relaxed text-slate-100">{studioAiAnswer}</p>
+        </div>
+      )}
+
+      {/* 💬 ASK GOOGLE AI TEXT & VOICE BAR IN STUDIO ROOM */}
+      <form
+        onSubmit={(e) => handleStudioAskGoogle(e)}
+        className="mx-3 sm:mx-6 mb-2 p-2 bg-slate-900/95 backdrop-blur-xl border border-amber-400/80 rounded-2xl shadow-2xl flex items-center gap-2 shrink-0 z-30"
+      >
+        <div className="pl-2 pr-1 flex items-center gap-1.5 text-amber-300 font-extrabold text-xs shrink-0">
+          <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+          <span className="hidden sm:inline">Ask Google AI:</span>
+        </div>
+        <input
+          type="text"
+          value={studioQuestionInput}
+          onChange={(e) => setStudioQuestionInput(e.target.value)}
+          placeholder="Ask anything about this room camera (e.g. price, features)..."
+          className="flex-1 bg-black/70 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
+        />
+        <button
+          type="submit"
+          disabled={isAiProcessing}
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 shrink-0 active:scale-95 disabled:opacity-50"
+        >
+          {isAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Ask</span>}
+        </button>
+      </form>
 
       {/* CIRCULAR ICON-ONLY TOUCH DOCK */}
       <div className="bg-slate-900 border-t border-slate-800 h-16 sm:h-20 px-4 w-full flex items-center justify-around gap-2 shrink-0 z-30">

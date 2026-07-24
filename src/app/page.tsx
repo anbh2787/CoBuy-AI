@@ -30,6 +30,8 @@ export default function Home() {
   const [isHomeTranslateArActive, setIsHomeTranslateArActive] = useState(false);
   const [homeArTranslations, setHomeArTranslations] = useState<any[]>([]);
   const [homeTouchTarget, setHomeTouchTarget] = useState<{ x: number; y: number; label?: string; isLoading?: boolean } | null>(null);
+  const [homeQuestionInput, setHomeQuestionInput] = useState('');
+  const [homeAiAnswer, setHomeAiAnswer] = useState<string | null>(null);
 
   const homeVideoRef = useRef<HTMLVideoElement | null>(null);
   const homeStreamRef = useRef<MediaStream | null>(null);
@@ -89,12 +91,26 @@ export default function Home() {
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (homeStreamRef.current) {
-          homeStreamRef.current.getTracks().forEach(t => t.stop());
+          homeStreamRef.current.getTracks().forEach(t => {
+            try { t.stop(); } catch (e) {}
+          });
+          homeStreamRef.current = null;
+          if (homeVideoRef.current) homeVideoRef.current.srcObject = null;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true
-        });
+        await new Promise(r => setTimeout(r, 350));
+
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true
+          });
+        } catch (exactErr) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true
+          });
+        }
         homeStreamRef.current = stream;
         if (homeVideoRef.current) {
           homeVideoRef.current.srcObject = stream;
@@ -264,6 +280,7 @@ export default function Home() {
               const reply = data.spokenReply || 'Observation complete!';
               setIsHomeAiProcessing(false);
               setIsHomeAiSpeaking(true);
+              setHomeAiAnswer(reply);
               setHomeStatus(`Observation: "${reply}"`);
               speakWithHumanVoice(reply, () => setIsHomeAiSpeaking(false));
             } catch (err) { setIsHomeAiProcessing(false); }
@@ -275,6 +292,47 @@ export default function Home() {
         setIsHomeVoiceRecording(true);
         setHomeStatus('🎙️ Listening... Speak your question aloud and tap ✨ again when done');
       } catch (e) {}
+    }
+  };
+
+  const handleHomeAskGoogle = async (e?: React.FormEvent, customQuestion?: string) => {
+    if (e) e.preventDefault();
+    if (isHomeAiProcessing || !homeVideoRef.current) return;
+    const qText = customQuestion || homeQuestionInput.trim() || 'Describe what appears right inside this camera view out loud.';
+    setHomeQuestionInput('');
+    setIsHomeAiProcessing(true);
+    setIsHomeAiSpeaking(false);
+    setHomeAiAnswer(null);
+    setHomeStatus(`Consulting Google AI: "${qText}"...`);
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = homeVideoRef.current?.videoWidth || 1280;
+      canvas.height = homeVideoRef.current?.videoHeight || 720;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || !homeVideoRef.current) { setIsHomeAiProcessing(false); return; }
+      ctx.drawImage(homeVideoRef.current, 0, 0, canvas.width, canvas.height);
+      const base64Frame = canvas.toDataURL('image/jpeg', 0.88);
+
+      const response = await fetch('/api/live-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frameBase64: base64Frame,
+          questionText: qText,
+          currentUserName: activeUser?.name || 'Explorer'
+        })
+      });
+      const data = await response.json();
+      const reply = data.spokenReply || 'Observation complete right now!';
+      setIsHomeAiProcessing(false);
+      setIsHomeAiSpeaking(true);
+      setHomeAiAnswer(reply);
+      setHomeStatus(`AI Answer: "${reply}"`);
+      speakWithHumanVoice(reply, () => setIsHomeAiSpeaking(false));
+    } catch (err: any) {
+      setIsHomeAiProcessing(false);
+      setHomeStatus('Google AI error: ' + (err?.message || 'network timeout'));
     }
   };
 
@@ -509,6 +567,56 @@ export default function Home() {
           </div>
 
           <div className="flex-1" />
+
+          {/* AI ANSWER DISPLAY CARD ON HOMEPAGE */}
+          {homeAiAnswer && (
+            <div className="relative z-30 mx-3 sm:mx-5 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-1.5 text-left">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="font-black text-xs text-amber-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Google Gemini Answer
+                </span>
+                <button onClick={(e) => { e.stopPropagation(); setHomeAiAnswer(null); }} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
+              </div>
+              <p className="text-xs font-semibold leading-relaxed text-slate-100">{homeAiAnswer}</p>
+            </div>
+          )}
+
+          {/* 💬 ASK GOOGLE AI TEXT & VOICE BAR ON VIEWFINDER */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleHomeAskGoogle(e); }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-20 mx-3 sm:mx-5 mb-3 p-2 bg-slate-900/95 backdrop-blur-xl border border-amber-400/80 rounded-2xl shadow-2xl flex items-center gap-2 pointer-events-auto"
+          >
+            <div className="pl-2.5 pr-1 flex items-center gap-1.5 text-amber-300 font-extrabold text-xs shrink-0">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span className="hidden sm:inline">Ask Google AI:</span>
+            </div>
+            <input
+              type="text"
+              value={homeQuestionInput}
+              onChange={(e) => setHomeQuestionInput(e.target.value)}
+              placeholder="Ask anything about this video (e.g. price, translation)..."
+              className="flex-1 bg-black/70 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
+            />
+            <button
+              type="button"
+              onClick={() => handleHomeTapAndSpeakToggle()}
+              className={`p-2 px-3 rounded-xl font-extrabold text-xs transition flex items-center gap-1 shrink-0 ${
+                isHomeVoiceRecording ? 'bg-rose-600 text-white animate-bounce ring-2 ring-rose-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600'
+              }`}
+              title="Tap & Speak aloud"
+            >
+              {isHomeVoiceRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-brand-400" />}
+              <span className="hidden md:inline">{isHomeVoiceRecording ? 'Stop' : 'Voice'}</span>
+            </button>
+            <button
+              type="submit"
+              disabled={isHomeAiProcessing}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 shrink-0 active:scale-95 disabled:opacity-50"
+            >
+              {isHomeAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Ask</span>}
+            </button>
+          </form>
 
           {/* VIEWFINDER BOTTOM LAUNCH ACTION BAR */}
           <div className="relative z-10 p-4 sm:p-5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-auto">
