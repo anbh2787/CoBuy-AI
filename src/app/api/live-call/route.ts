@@ -20,8 +20,9 @@ export async function POST(req: Request) {
         // DEDICATED STEP 1 VOICE TRANSCRIPTION PASS
         if (audioBase64 && audioBase64.length > 500) {
           try {
-            const audioMatch = audioBase64.match(/^data:(audio\/[a-zA-Z0-9.\-_]+);base64,(.+)$/i);
+            const audioMatch = audioBase64.match(/^data:([^;]+);base64,(.+)$/i);
             if (audioMatch && audioMatch[2]) {
+              const cleanMime = audioMatch[1].split(';')[0];
               const sttRes = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent", {
                 method: 'POST',
                 headers: {
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
                 body: JSON.stringify({
                   contents: [{
                     parts: [
-                      { inline_data: { mime_type: audioMatch[1], data: audioMatch[2] } },
+                      { inline_data: { mime_type: cleanMime, data: audioMatch[2] } },
                       { text: "Listen to this audio recording carefully. Transcribe the exact English words spoken by the user verbatim. Return ONLY the transcribed text string without any commentary, markdown, or quotation marks. If silent, muffled, or no speech detected, return 'Visual Inspection'." }
                     ]
                   }]
