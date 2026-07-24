@@ -45,6 +45,7 @@ export default function GroupChatRoom({ params }: PageProps) {
   const [isCallActiveBanner, setIsCallActiveBanner] = useState(false);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const roomChannelRef = useRef<any>(null);
 
   useEffect(() => {
     const initRoom = async () => {
@@ -53,8 +54,24 @@ export default function GroupChatRoom({ params }: PageProps) {
       let profile: User | null = null;
       if (session?.user) {
         profile = await syncGoogleProfileToDatabase(session.user);
-        setCurrentUser(profile);
       }
+      if (!profile) {
+        let guestJson = typeof window !== 'undefined' ? localStorage.getItem('cobuy_guest_user') : null;
+        if (guestJson) {
+          try { profile = JSON.parse(guestJson); } catch(e){}
+        }
+        if (!profile) {
+          const randomNum = Math.floor(100 + Math.random() * 900);
+          profile = {
+            id: 'guest-' + randomNum + '-' + Date.now().toString().slice(-4),
+            name: `Guest #${randomNum}`,
+            email: `guest.${randomNum}@cobuy.ai`,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=guest${randomNum}`
+          };
+          if (typeof window !== 'undefined') localStorage.setItem('cobuy_guest_user', JSON.stringify(profile));
+        }
+      }
+      setCurrentUser(profile);
 
       const roomData = await fetchGroupByCodeOrId(params.groupId);
       setGroup(roomData);
@@ -63,6 +80,18 @@ export default function GroupChatRoom({ params }: PageProps) {
     initRoom();
 
     const channel = supabase.channel(`private_room_${params.groupId}`)
+      .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+        if (payload.message) {
+          if (payload.message.content?.includes('started a Live Group Video & AI Call')) {
+            setIsCallActiveBanner(true);
+          }
+          setGroup(prev => {
+            if (!prev) return prev;
+            if (prev.messages.some(m => m.id === payload.message.id)) return prev;
+            return { ...prev, messages: [...prev.messages, payload.message] };
+          });
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         if (payload.new && payload.new.content) {
           if (payload.new.content.includes('started a Live Group Video & AI Call')) {
@@ -128,6 +157,8 @@ export default function GroupChatRoom({ params }: PageProps) {
         }
       })
       .subscribe();
+
+    roomChannelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
@@ -790,6 +821,19 @@ export default function GroupChatRoom({ params }: PageProps) {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {currentUser?.id.startsWith('guest-') && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
+                }}
+                className="bg-[#2B4C7E] hover:bg-[#203960] text-white px-2.5 sm:px-3 py-2 rounded-xl text-xs font-black transition shrink-0 flex items-center gap-1 shadow-xs active:scale-95"
+                title="Upgrade Guest account to verified Google profile"
+              >
+                <LogIn className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sign in with Google</span>
+              </button>
+            )}
+
             {/* ICON-ONLY SHARE BUTTON */}
             <button
               onClick={handleCopyInvite}

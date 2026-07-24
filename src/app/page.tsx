@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Group, User } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchUserPrivateGroups, createPrivateGroup, syncGoogleProfileToDatabase } from '@/lib/sync';
-import { Plus, Users, Sparkles, Camera, CreditCard, Lock, ArrowRight, Loader2, Video, ShoppingBag, X, ChevronRight, RefreshCw } from 'lucide-react';
+import { Plus, Users, Sparkles, Camera, CreditCard, Lock, ArrowRight, Loader2, Video, ShoppingBag, X, ChevronRight, RefreshCw, Globe, Volume2, Mic, MicOff } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
@@ -20,11 +20,70 @@ export default function Home() {
   const [isCreating, setIsCreating] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
 
-  // STEP 5: HOMEPAGE LIVE VIEWFINDER MIRROR STATE
+  // STEP 5: HOMEPAGE LIVE VIEWFINDER MIRROR & INTERACTIVE STUDIO STATE
   const [isViewfinderActive, setIsViewfinderActive] = useState<boolean>(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+  const [isHomeAiProcessing, setIsHomeAiProcessing] = useState(false);
+  const [isHomeAiSpeaking, setIsHomeAiSpeaking] = useState(false);
+  const [isHomeVoiceRecording, setIsHomeVoiceRecording] = useState(false);
+  const [homeStatus, setHomeStatus] = useState<string>('Tap ANY viewfinder item to target • Tap ✨ to speak • Tap 🌐 for AR');
+  const [isHomeTranslateArActive, setIsHomeTranslateArActive] = useState(false);
+  const [homeArTranslations, setHomeArTranslations] = useState<any[]>([]);
+  const [homeTouchTarget, setHomeTouchTarget] = useState<{ x: number; y: number; label?: string; isLoading?: boolean } | null>(null);
+
   const homeVideoRef = useRef<HTMLVideoElement | null>(null);
   const homeStreamRef = useRef<MediaStream | null>(null);
+  const homeAudioChunksRef = useRef<Blob[]>([]);
+  const homeMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const homeArIntervalRef = useRef<any>(null);
+  const homeTimeoutRef = useRef<any>(null);
+
+  const speakWithHumanVoice = async (text: string, onFinish?: () => void) => {
+    try {
+      if (typeof window === 'undefined') return;
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.audioUrl) {
+            const audio = new Audio(data.audioUrl);
+            audio.onended = () => { if (onFinish) onFinish(); };
+            audio.onerror = () => { fallbackToWebSpeech(text, onFinish); };
+            await audio.play();
+            return;
+          }
+        }
+      } catch (e) { /* no-op */ }
+      fallbackToWebSpeech(text, onFinish);
+    } catch (e) {
+      if (onFinish) onFinish();
+    }
+  };
+
+  const fallbackToWebSpeech = (text: string, onFinish?: () => void) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        if (onFinish) onFinish();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const humanVoice = voices.find(v => v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Jenny')) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+      if (humanVoice) utterance.voice = humanVoice;
+      utterance.rate = 1.05;
+      utterance.pitch = 1.02;
+      utterance.onend = () => { if (onFinish) onFinish(); };
+      utterance.onerror = () => { if (onFinish) onFinish(); };
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      if (onFinish) onFinish();
+    }
+  };
 
   const startHomeViewfinder = async (mode: 'user' | 'environment') => {
     try {
@@ -34,7 +93,7 @@ export default function Home() {
         }
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false
+          audio: true
         });
         homeStreamRef.current = stream;
         if (homeVideoRef.current) {
@@ -50,11 +109,173 @@ export default function Home() {
   };
 
   const stopHomeViewfinder = () => {
+    if (homeTimeoutRef.current) clearTimeout(homeTimeoutRef.current);
+    if (homeArIntervalRef.current) clearInterval(homeArIntervalRef.current);
+    if (homeMediaRecorderRef.current && homeMediaRecorderRef.current.state === 'recording') {
+      try { homeMediaRecorderRef.current.stop(); } catch (err) { /* no-op */ }
+    }
     if (homeStreamRef.current) {
       homeStreamRef.current.getTracks().forEach(t => t.stop());
       homeStreamRef.current = null;
     }
     setIsViewfinderActive(false);
+  };
+
+  // LIVE AR TRANSLATION LOOP FOR HOMEPAGE
+  useEffect(() => {
+    if (isHomeTranslateArActive && isViewfinderActive) {
+      setHomeStatus('🌐 AR Translate Active: Scanning physical signage & labels right now...');
+      homeArIntervalRef.current = setInterval(async () => {
+        if (!homeVideoRef.current) return;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = homeVideoRef.current.videoWidth || 1280;
+          canvas.height = homeVideoRef.current.videoHeight || 720;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(homeVideoRef.current, 0, 0, canvas.width, canvas.height);
+          const base64Frame = canvas.toDataURL('image/jpeg', 0.82);
+          if (!base64Frame || base64Frame === 'data:,' || base64Frame.length < 3000) return;
+
+          const response = await fetch('/api/translate-ar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ frameBase64: base64Frame, targetLanguage: 'English' })
+          });
+          const data = await response.json();
+          if (data && Array.isArray(data.translations) && data.translations.length > 0) {
+            setHomeArTranslations(data.translations);
+          }
+        } catch (e) { /* no-op */ }
+      }, 2200);
+    } else {
+      if (homeArIntervalRef.current) clearInterval(homeArIntervalRef.current);
+      if (!isHomeTranslateArActive && isViewfinderActive) {
+        setHomeStatus('Tap ANY viewfinder item to target • Tap ✨ to speak • Tap 🌐 for AR');
+        setHomeArTranslations([]);
+      }
+    }
+    return () => { if (homeArIntervalRef.current) clearInterval(homeArIntervalRef.current); };
+  }, [isHomeTranslateArActive, isViewfinderActive]);
+
+  // TOUCH TO IDENTIFY ON HOMEPAGE
+  const handleHomeTouchIdentify = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isHomeAiProcessing || isHomeVoiceRecording || !homeVideoRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+    if (homeTouchTarget && Math.abs(homeTouchTarget.x - clickX) < 8 && Math.abs(homeTouchTarget.y - clickY) < 8) {
+      setHomeTouchTarget(null);
+      if (homeTimeoutRef.current) clearTimeout(homeTimeoutRef.current);
+      return;
+    }
+
+    if (homeTimeoutRef.current) clearTimeout(homeTimeoutRef.current);
+    const newTarget = { x: Math.round(clickX), y: Math.round(clickY), isLoading: true };
+    setHomeTouchTarget(newTarget);
+    setIsHomeAiProcessing(true);
+    setIsHomeAiSpeaking(false);
+    setHomeStatus('Scanning target item beneath crosshair...');
+
+    setTimeout(async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = homeVideoRef.current?.videoWidth || 1280;
+        canvas.height = homeVideoRef.current?.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (!ctx || !homeVideoRef.current) { setIsHomeAiProcessing(false); return; }
+        ctx.drawImage(homeVideoRef.current, 0, 0, canvas.width, canvas.height);
+        const base64Frame = canvas.toDataURL('image/jpeg', 0.88);
+
+        const response = await fetch('/api/live-call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frameBase64: base64Frame,
+            touchTarget: { x: newTarget.x, y: newTarget.y },
+            currentUserName: activeUser?.name || 'Explorer'
+          })
+        });
+        const data = await response.json();
+        const reply = data.spokenReply || 'I verified your targeted view right now!';
+        const targetLabel = data.telemetry?.targetLabel || reply.split('.')[0] || 'Target Item';
+
+        setIsHomeAiProcessing(false);
+        setIsHomeAiSpeaking(true);
+        setHomeStatus(`Target confirmed: ${targetLabel}`);
+        setHomeTouchTarget({ x: newTarget.x, y: newTarget.y, label: targetLabel, isLoading: false });
+
+        speakWithHumanVoice(reply, () => setIsHomeAiSpeaking(false));
+
+        if (homeTimeoutRef.current) clearTimeout(homeTimeoutRef.current);
+        homeTimeoutRef.current = setTimeout(() => {
+          setHomeTouchTarget(null);
+        }, 5000);
+      } catch (err: any) {
+        setIsHomeAiProcessing(false);
+        setHomeStatus('Scan exception: ' + (err?.message || 'timeout'));
+      }
+    }, 110);
+  };
+
+  // VOICE QUESTION ON HOMEPAGE
+  const handleHomeTapAndSpeakToggle = () => {
+    if (isHomeAiProcessing || !homeVideoRef.current) return;
+    if (isHomeVoiceRecording && homeMediaRecorderRef.current) {
+      setIsHomeVoiceRecording(false);
+      try { homeMediaRecorderRef.current.stop(); } catch (e) {}
+      return;
+    }
+
+    if (homeStreamRef.current && typeof MediaRecorder !== 'undefined') {
+      try {
+        homeAudioChunksRef.current = [];
+        const audioTracks = homeStreamRef.current.getAudioTracks();
+        if (audioTracks.length === 0) return;
+
+        const recordStream = new MediaStream([audioTracks[0]]);
+        let recorder = new MediaRecorder(recordStream);
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) homeAudioChunksRef.current.push(e.data);
+        };
+        recorder.onstop = async () => {
+          setIsHomeVoiceRecording(false);
+          setHomeStatus('Evaluating visual parameters out loud...');
+          const audioBlob = new Blob(homeAudioChunksRef.current, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64Audio = reader.result as string;
+            setIsHomeAiProcessing(true);
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = homeVideoRef.current?.videoWidth || 1280;
+              canvas.height = homeVideoRef.current?.videoHeight || 720;
+              const ctx = canvas.getContext('2d');
+              if (ctx && homeVideoRef.current) ctx.drawImage(homeVideoRef.current, 0, 0, canvas.width, canvas.height);
+              const base64Frame = canvas.toDataURL('image/jpeg', 0.88);
+
+              const response = await fetch('/api/live-call', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frameBase64: base64Frame, audioBase64: base64Audio, currentUserName: activeUser?.name || 'Explorer' })
+              });
+              const data = await response.json();
+              const reply = data.spokenReply || 'Observation complete!';
+              setIsHomeAiProcessing(false);
+              setIsHomeAiSpeaking(true);
+              setHomeStatus(`Observation: "${reply}"`);
+              speakWithHumanVoice(reply, () => setIsHomeAiSpeaking(false));
+            } catch (err) { setIsHomeAiProcessing(false); }
+          };
+          reader.readAsDataURL(audioBlob);
+        };
+        recorder.start(100);
+        homeMediaRecorderRef.current = recorder;
+        setIsHomeVoiceRecording(true);
+        setHomeStatus('🎙️ Listening... Speak your question aloud and tap ✨ again when done');
+      } catch (e) {}
+    }
   };
 
   useEffect(() => {
@@ -81,7 +302,12 @@ export default function Home() {
       }
     };
     initSession();
-    startHomeViewfinder('user');
+
+    // SMART CAMERA LENS AUTODETECTION (Mobile vs Desktop)
+    const isMobileDevice = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const initialMode: 'user' | 'environment' = isMobileDevice ? 'environment' : 'user';
+    setCameraFacing(initialMode);
+    startHomeViewfinder(initialMode);
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
@@ -169,8 +395,11 @@ export default function Home() {
           <span className="text-[#2B4C7E]">Consult AI. Split Instantly.</span>
         </h1>
 
-        {/* STEP 5: HOMEPAGE LIVE STUDIO VIEWFINDER MIRROR */}
-        <div className="w-full max-w-2xl bg-slate-950 border-2 border-amber-900/20 rounded-[32px] overflow-hidden shadow-2xl relative flex flex-col justify-end min-h-[260px] sm:min-h-[360px] max-h-[440px]">
+        {/* STEP 5: HOMEPAGE LIVE STUDIO VIEWFINDER MIRROR (FULL INTERACTIVE STUDIO) */}
+        <div
+          onClick={handleHomeTouchIdentify}
+          className="w-full max-w-2xl bg-slate-950 border-2 border-amber-900/20 rounded-[32px] overflow-hidden shadow-2xl relative flex flex-col justify-end min-h-[280px] sm:min-h-[380px] max-h-[460px] cursor-crosshair select-none"
+        >
           {isViewfinderActive ? (
             <video
               ref={homeVideoRef}
@@ -180,7 +409,7 @@ export default function Home() {
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-slate-400 p-6">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-slate-400 p-6 pointer-events-auto">
               <Camera className="w-12 h-12 text-slate-600 mb-2 animate-pulse" />
               <p className="text-xs font-black text-white">Camera Mirror Paused or Permission Required</p>
               <button
@@ -193,6 +422,45 @@ export default function Home() {
             </div>
           )}
 
+          {/* TOUCH TARGET RING ON HOMEPAGE */}
+          {homeTouchTarget && (
+            <div
+              style={{ left: `${homeTouchTarget.x}%`, top: `${homeTouchTarget.y}%`, transform: 'translate(-50%, -50%)' }}
+              className="absolute z-30 flex flex-col items-center pointer-events-none animate-in zoom-in-75 duration-200"
+            >
+              <div className="w-11 h-11 rounded-full border-2 border-amber-400 bg-amber-400/25 ring-4 ring-amber-400/30 animate-ping absolute inset-0" />
+              <div className="w-11 h-11 rounded-full border-2 border-white flex items-center justify-center bg-black/45 backdrop-blur-xs relative shadow-2xl">
+                <span className="text-sm">🎯</span>
+              </div>
+              {homeTouchTarget.isLoading ? (
+                <span className="mt-1.5 bg-slate-900/90 text-amber-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xl whitespace-nowrap">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Identifying...
+                </span>
+              ) : homeTouchTarget.label ? (
+                <span className="mt-1.5 bg-[#22252A]/95 text-white border-2 border-amber-400 px-3.5 py-1.5 rounded-2xl text-xs font-black shadow-2xl whitespace-nowrap tracking-tight flex items-center gap-1 text-center">
+                  <span className="text-amber-400 font-extrabold text-[10px] uppercase">🎯</span>
+                  <span>{homeTouchTarget.label}</span>
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          {/* AR OPTICAL TRANSLATION CARD ON HOMEPAGE */}
+          {homeArTranslations.slice(0, 1).map((item, idx) => (
+            <div
+              key={idx}
+              style={{ left: `${Math.min(Math.max(item.x || 48, 20), 60)}%`, top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`, transform: 'translate(-50%, -50%)' }}
+              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
+            >
+              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
+                <span>🏷️</span><span className="truncate">{item.title || item.translation}</span>
+              </div>
+              {item.features && <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight"><strong className="text-emerald-400 font-bold">Features:</strong> {item.features}</div>}
+              {item.instructions && <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight"><strong className="text-amber-300 font-bold">How to Use:</strong> {item.instructions}</div>}
+              {item.precautions && <div className="text-[11px] sm:text-xs font-bold text-rose-300 bg-rose-950/40 p-2 rounded-xl border border-rose-500/30 leading-tight"><strong className="text-rose-400 uppercase">Caution:</strong> {item.precautions}</div>}
+            </div>
+          ))}
+
           {/* VIEWFINDER OVERLAY HEADER */}
           <div className="relative z-10 p-3 bg-gradient-to-b from-black/80 via-black/30 to-transparent flex items-center justify-between pointer-events-auto">
             <div className="flex items-center gap-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-xl border border-slate-700">
@@ -200,36 +468,89 @@ export default function Home() {
               <span className="text-xs font-extrabold text-white tracking-tight uppercase">Live Studio Viewfinder</span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const next = cameraFacing === 'user' ? 'environment' : 'user';
-                setCameraFacing(next);
-                startHomeViewfinder(next);
-              }}
-              className="p-2 px-3 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-slate-700 text-amber-400 font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Flip
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIsHomeTranslateArActive(!isHomeTranslateArActive); }}
+                className={`p-2 px-3 rounded-xl font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg ${
+                  isHomeTranslateArActive ? 'bg-gradient-to-tr from-[#4285F4] via-[#34A853] to-[#FBBC05] text-white border border-white animate-pulse' : 'bg-black/60 hover:bg-black/80 backdrop-blur-md border border-slate-700 text-amber-300'
+                }`}
+                title="Toggle Real-Time AR Optical Translate"
+              >
+                <Globe className="w-3.5 h-3.5" /> <span>AR Translate</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleHomeTapAndSpeakToggle(); }}
+                className={`p-2 px-3 rounded-xl font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg ${
+                  isHomeVoiceRecording ? 'bg-rose-600 text-white animate-bounce ring-2 ring-rose-400' : 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white hover:opacity-95'
+                }`}
+                title="Tap & Talk Voice Question"
+              >
+                {isHomeAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}
+                <span>{isHomeVoiceRecording ? 'Listening...' : 'Ask AI'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const next = cameraFacing === 'user' ? 'environment' : 'user';
+                  setCameraFacing(next);
+                  startHomeViewfinder(next);
+                }}
+                className="p-2 px-3 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-slate-700 text-amber-400 font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg"
+                title="Flip Camera Lens"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Flip
+              </button>
+            </div>
           </div>
 
           <div className="flex-1" />
 
           {/* VIEWFINDER BOTTOM LAUNCH ACTION BAR */}
-          <div className="relative z-10 p-4 sm:p-5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative z-10 p-4 sm:p-5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-auto">
             <div className="text-left min-w-0">
               <p className="text-white font-black text-sm sm:text-base truncate">Ready to invite your friends?</p>
-              <p className="text-slate-300 text-xs font-medium truncate">Start instant group AR shopping session out right across this camera</p>
+              <p className="text-slate-300 text-xs font-medium truncate">{homeStatus}</p>
             </div>
 
             <button
               type="button"
-              onClick={() => handleCreateRoom(undefined, activeUser ? `${activeUser.name}'s Video Studio` : "Shared CoBuy Room")}
+              onClick={(e) => { e.stopPropagation(); handleCreateRoom(undefined, activeUser ? `${activeUser.name}'s Video Studio` : "Shared CoBuy Room"); }}
               disabled={isCreating}
               className="w-full sm:w-auto py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-600 to-brand-600 hover:opacity-95 text-white font-black text-sm transition shadow-2xl flex items-center justify-center gap-2 active:scale-95 shrink-0 border border-white/20"
             >
               {isCreating ? <Loader2 className="w-5 h-5 animate-spin text-white" /> : <Video className="w-5 h-5 text-white animate-bounce" />}
               <span>🚀 Open Studio Room</span>
+            </button>
+          </div>
+        </div>
+
+        {/* PROMINENT ALWAYS-OPEN PUBLIC DEMO ROOM BANNER (ZERO LOGIN REQUIRED) */}
+        <div className="mt-5 w-full max-w-2xl bg-gradient-to-r from-emerald-500 via-teal-600 to-brand-600 rounded-[28px] p-1 shadow-2xl">
+          <div className="bg-slate-950/95 backdrop-blur-xl rounded-[26px] p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping shrink-0" />
+                <h3 className="font-black text-white text-base sm:text-lg">🌐 Always-Open Public Demo Room</h3>
+              </div>
+              <p className="text-slate-300 text-xs font-medium leading-relaxed">
+                No sign-in required! Enter instantly as a Guest Explorer to test live AR, touch pointers, and AI voice with anyone connected right now.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                stopHomeViewfinder();
+                router.push('/group/public-demo-room');
+              }}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-sm transition shadow-lg shrink-0 flex items-center justify-center gap-2 active:scale-95"
+            >
+              <span>⚡ Enter Public Room</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>

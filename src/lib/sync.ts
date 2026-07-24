@@ -178,6 +178,19 @@ export async function fetchGroupByCodeOrId(identifier: string): Promise<Group | 
 
     const { data: groupRows, error } = await query.limit(1);
 
+    if ((identifier === 'public-demo-room' || identifier === 'public') && (error || !groupRows || groupRows.length === 0)) {
+      return {
+        id: 'public-demo-room',
+        inviteCode: 'public-demo-room',
+        title: '🌐 CoBuy AI Global Public Studio',
+        description: 'Permanent open video & shopping room — join instantly with or without login!',
+        members: [],
+        expenses: [],
+        settlements: [],
+        messages: []
+      };
+    }
+
     if (error || !groupRows || groupRows.length === 0) return null;
     const g = groupRows[0];
 

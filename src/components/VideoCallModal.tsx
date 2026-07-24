@@ -99,7 +99,10 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
       const initStudioSequence = async () => {
         logRcaInstrument('INIT_START', `User ${currentUser.name} (${currentUser.id}) opened studio inside room ${groupId}. Acquiring camera tracks strictly prior to channel signaling...`);
-        const cameraReady = await startLocalWebcam('user');
+        const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const initialMode = isMobile ? 'environment' : 'user';
+        setFacingMode(initialMode);
+        const cameraReady = await startLocalWebcam(initialMode);
         if (!isMounted) return;
         logRcaInstrument('INIT_CAMERA', cameraReady ? 'Local hardware webcam tracks loaded right successfully' : 'Warning: Local hardware device returned zero stream tracks');
         setupWebRTCSignaling();
