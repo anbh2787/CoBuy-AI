@@ -26,12 +26,12 @@ export async function POST(req: Request) {
         }
 
         if (audioBase64 && audioBase64.length > 500) {
-          const audioMatch = audioBase64.match(/^data:audio\/[a-zA-Z0-9.\-_]+;base64,(.+)$/i);
-          if (audioMatch && audioMatch[1]) {
+          const audioMatch = audioBase64.match(/^data:(audio\/[a-zA-Z0-9.\-_]+);base64,(.+)$/i);
+          if (audioMatch && audioMatch[2]) {
             parts.push({
               inline_data: {
-                mime_type: "audio/webm",
-                data: audioMatch[1]
+                mime_type: audioMatch[1],
+                data: audioMatch[2]
               }
             });
           }

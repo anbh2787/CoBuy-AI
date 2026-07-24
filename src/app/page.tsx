@@ -250,7 +250,7 @@ export default function Home() {
           setIsHomeVoiceRecording(false);
           audioStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
           setHomeStatus('Evaluating visual parameters out loud...');
-          const audioBlob = new Blob(homeAudioChunksRef.current, { type: 'audio/webm' });
+          const audioBlob = new Blob(homeAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64Audio = reader.result as string;
@@ -282,7 +282,13 @@ export default function Home() {
         recorder.start(100);
         homeMediaRecorderRef.current = recorder;
         setIsHomeVoiceRecording(true);
-        setHomeStatus('🎙️ Listening... Speak your question aloud and tap ✨ again when done');
+        setHomeStatus('🎙️ Listening... Speak your question aloud (auto-sends in 4s or tap ✨ again)');
+
+        setTimeout(() => {
+          if (recorder.state === 'recording') {
+            try { recorder.stop(); } catch (e) {}
+          }
+        }, 4200);
       } catch (e) {
         handleHomeAskGoogle(undefined, "Describe what physical object appears right inside this camera view out loud.");
       }

@@ -66,6 +66,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [studioQuestionInput, setStudioQuestionInput] = useState('');
   const [studioAiAnswer, setStudioAiAnswer] = useState<string | null>(null);
   const [isMirrored, setIsMirrored] = useState<boolean>(true);
+  const [selectedInspectPeerId, setSelectedInspectPeerId] = useState<string | null>(null);
 
   // DIAGNOSTIC WEBRTC INSTRUMENTATION & RCA PANEL STATE
   const [rcaLogs, setRcaLogs] = useState<RcaLogEntry[]>([]);
@@ -124,52 +125,61 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   // LIVE AR TRANSLATION SAMPLER LOOP
   useEffect(() => {
     if (isTranslateArActive && isOpen && !videoDisabled) {
-      setTelemetryStatus('🌐 AR Translate Active: Scanning physical signage & currency right now...');
+      setTelemetryStatus('🌐 AR Translate Active: Scanning physical signage & currency across room...');
       arSamplerIntervalRef.current = setInterval(async () => {
-        if (!localVideoRef.current) return;
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = localVideoRef.current.videoWidth || 1280;
-          canvas.height = localVideoRef.current.videoHeight || 720;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-
-          ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
-          const base64Frame = canvas.toDataURL('image/jpeg', 0.82);
-          if (!base64Frame || base64Frame === 'data:,' || base64Frame.length < 3000) return;
-
-          lastCapturedImageRef.current = base64Frame;
-
-          const response = await fetch('/api/translate-ar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              frameBase64: base64Frame,
-              targetLanguage: 'English'
-            })
-          });
-
-          const data = await response.json();
-          if (data && Array.isArray(data.translations) && data.translations.length > 0) {
-            setArTranslations(data.translations);
-            if (channelRef.current && currentUser) {
-              channelRef.current.send({
-                type: 'broadcast',
-                event: 'ar-sync',
-                payload: { peerId: currentUser.id, translations: data.translations }
-              });
-            }
-            data.translations.forEach((item: ARTranslationItem) => {
-              const fullDetails = `🌐 AR Translation Complete:\n• Item & Brand: ${item.title || item.translation || 'Product'}\n• Highlights: ${item.features || 'N/A'}\n• Directions: ${item.instructions || 'N/A'}\n• Precautions: ${item.precautions || 'N/A'}`;
-              if (!sessionNotesRef.current.some(note => note.includes(item.title || item.translation || 'Item'))) {
-                sessionNotesRef.current = [...sessionNotesRef.current, fullDetails];
-              }
-            });
-          }
-        } catch (err) {
-          console.warn('AR background sample warning:', err);
+        const videoEls: { el: HTMLVideoElement; peerId: string }[] = [];
+        if (localVideoRef.current && !videoDisabled) {
+          videoEls.push({ el: localVideoRef.current, peerId: currentUser?.id || 'local' });
         }
-      }, 2200);
+        remoteStreams.forEach(peer => {
+          const vid = document.querySelector(`video[data-peer-id="${peer.peerId}"]`) as HTMLVideoElement;
+          if (vid) videoEls.push({ el: vid, peerId: peer.peerId });
+        });
+
+        for (const item of videoEls) {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = item.el.videoWidth || 1280;
+            canvas.height = item.el.videoHeight || 720;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) continue;
+
+            ctx.drawImage(item.el, 0, 0, canvas.width, canvas.height);
+            const base64Frame = canvas.toDataURL('image/jpeg', 0.82);
+            if (!base64Frame || base64Frame === 'data:,' || base64Frame.length < 3000) continue;
+
+            if (item.peerId === currentUser?.id || item.peerId === 'local') {
+              lastCapturedImageRef.current = base64Frame;
+            }
+
+            const response = await fetch('/api/translate-ar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                frameBase64: base64Frame,
+                targetLanguage: 'English'
+              })
+            });
+
+            const data = await response.json();
+            if (data && Array.isArray(data.translations) && data.translations.length > 0) {
+              if (item.peerId === currentUser?.id || item.peerId === 'local') {
+                setArTranslations(data.translations);
+              } else {
+                setRemoteArMap(prev => ({ ...prev, [item.peerId]: data.translations }));
+              }
+
+              if (channelRef.current && currentUser) {
+                channelRef.current.send({
+                  type: 'broadcast',
+                  event: 'ar-sync',
+                  payload: { peerId: item.peerId, translations: data.translations }
+                });
+              }
+            }
+          } catch (err) { /* no-op */ }
+        }
+      }, 2400);
     } else {
       if (arSamplerIntervalRef.current) clearInterval(arSamplerIntervalRef.current);
       if (!isTranslateArActive && isOpen) {
@@ -673,7 +683,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         recorder.onstop = async () => {
           setIsVoiceRecording(false);
           setTelemetryStatus('Evaluating visual parameters right now...');
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64Audio = reader.result as string;
@@ -685,7 +695,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         recorder.start(100);
         mediaRecorderRef.current = recorder;
         setIsVoiceRecording(true);
-        setTelemetryStatus('🎙️ Listening... Speak aloud and tap icon when finished');
+        setTelemetryStatus('🎙️ Listening... Speak aloud (auto-sends in 4s or tap icon again)');
 
         if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = setTimeout(() => {
@@ -694,7 +704,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             setIsVoiceRecording(false);
             try { mediaRecorderRef.current.stop(); } catch (err) { /* no-op */ }
           }
-        }, 7000);
+        }, 4200);
       } catch (err) {
         setIsVoiceRecording(false);
         captureFrameAndSendToAi(undefined);
@@ -704,8 +714,11 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
-  const captureFrameAndSendToAi = (recordedAudioBase64?: string, touchedCoords?: { x: number; y: number }, customQ?: string) => {
-    if (!localVideoRef.current || isAiProcessing) return;
+  const captureFrameAndSendToAi = (recordedAudioBase64?: string, touchedCoords?: { x: number; y: number }, customQ?: string, overrideVideoEl?: HTMLVideoElement | null, overridePeerName?: string) => {
+    const targetVideoEl = overrideVideoEl || (selectedInspectPeerId ? document.querySelector(`video[data-peer-id="${selectedInspectPeerId}"]`) as HTMLVideoElement : null) || (remoteStreams.length === 1 && videoDisabled ? document.querySelector(`video[data-peer-id="${remoteStreams[0].peerId}"]`) as HTMLVideoElement : null) || localVideoRef.current;
+    if (!targetVideoEl || isAiProcessing) return;
+
+    const targetPeerName = overridePeerName || (selectedInspectPeerId ? remoteStreams.find(s => s.peerId === selectedInspectPeerId)?.peerName : undefined) || (targetVideoEl !== localVideoRef.current && remoteStreams.length === 1 ? remoteStreams[0].peerName : undefined);
 
     setIsAiProcessing(true);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -713,18 +726,18 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
     setIsAiSpeaking(false);
     setStudioAiAnswer(null);
-    setTelemetryStatus(touchedCoords ? 'Scanning target item beneath crosshair...' : (customQ ? `Consulting Google AI: "${customQ}"...` : 'Processing conversational answer...'));
+    setTelemetryStatus(touchedCoords ? `Scanning item on ${targetPeerName || 'your'} camera...` : (customQ ? `Consulting Google AI: "${customQ}"...` : `Inspecting ${targetPeerName || 'local'} video...`));
 
     setTimeout(async () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = localVideoRef.current?.videoWidth || 1280;
-        canvas.height = localVideoRef.current?.videoHeight || 720;
+        canvas.width = targetVideoEl.videoWidth || 1280;
+        canvas.height = targetVideoEl.videoHeight || 720;
         const ctx = canvas.getContext('2d');
         let base64Frame = '';
 
-        if (ctx && localVideoRef.current) {
-          ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
+        if (ctx && targetVideoEl) {
+          ctx.drawImage(targetVideoEl, 0, 0, canvas.width, canvas.height);
           base64Frame = canvas.toDataURL('image/jpeg', 0.88);
 
           if (!base64Frame || base64Frame === 'data:,' || base64Frame.length < 3000) {
@@ -744,6 +757,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             audioBase64: recordedAudioBase64 || null,
             questionText: recordedAudioBase64 ? undefined : (customQ || "Describe what physical object appears right inside this picture out loud."),
             touchTarget: touchedCoords || null,
+            remotePeerName: targetPeerName || null,
             currentUserName: currentUser?.name || 'Anuj'
           })
         });
@@ -1078,6 +1092,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               className="flex-1 min-h-0 min-w-0 rounded-3xl bg-slate-900 border border-slate-700/90 overflow-hidden relative shadow-2xl flex flex-col justify-end cursor-crosshair sm:cursor-pointer select-none"
             >
               <video
+                data-peer-id={peer.peerId}
                 ref={(node) => {
                   if (node && node.srcObject !== peer.stream) {
                     node.srcObject = peer.stream;
@@ -1088,6 +1103,24 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 playsInline
                 className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
               />
+
+              {/* REMOTE PEER ASK AI BUTTON */}
+              <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const vid = e.currentTarget.closest('div')?.querySelector('video');
+                    setSelectedInspectPeerId(peer.peerId);
+                    captureFrameAndSendToAi(undefined, undefined, undefined, vid, peer.peerName);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-black text-xs shadow-2xl flex items-center gap-1 active:scale-95 border border-white/20"
+                  title={`Ask Google AI about ${peer.peerName}'s live camera feed`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Ask AI about {peer.peerName}</span>
+                </button>
+              </div>
 
               {/* STEP 3 REMOTE PEER TOUCH TARGET RING */}
               {peerTouchTarget && (
