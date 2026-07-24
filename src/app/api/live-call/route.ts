@@ -33,7 +33,7 @@ export async function POST(req: Request) {
                   contents: [{
                     parts: [
                       { inline_data: { mime_type: cleanMime, data: audioMatch[2] } },
-                      { text: "Listen to this audio recording carefully. Transcribe the exact English words spoken by the user verbatim. Return ONLY the transcribed text string without any commentary, markdown, or quotation marks. If silent, muffled, or no speech detected, return 'Visual Inspection'." }
+                      { text: "Audio Speech Recognition: Transcribe any spoken words or speech in this audio recording into English text. Return ONLY the verbatim transcribed words. If no clear spoken words are heard, reply exactly with: 'Visual Inspection'." }
                     ]
                   }]
                 })
