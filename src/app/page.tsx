@@ -98,26 +98,33 @@ export default function Home() {
           homeStreamRef.current = null;
           if (homeVideoRef.current) homeVideoRef.current.srcObject = null;
         }
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 250));
 
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: true
-          });
-        } catch (exactErr) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: true
-          });
+        let stream: MediaStream | null = null;
+        const constraintsList = [
+          { video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          { video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          { video: true, audio: false }
+        ];
+
+        for (const c of constraintsList) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(c as any);
+            if (stream) break;
+          } catch (err) { /* try next fallback */ }
         }
-        homeStreamRef.current = stream;
-        if (homeVideoRef.current) {
-          homeVideoRef.current.srcObject = stream;
-          homeVideoRef.current.play().catch(() => {});
+
+        if (stream) {
+          homeStreamRef.current = stream;
+          if (homeVideoRef.current) {
+            homeVideoRef.current.srcObject = stream;
+            homeVideoRef.current.play().catch(() => {});
+          }
+          setIsViewfinderActive(true);
+        } else {
+          setIsViewfinderActive(false);
         }
-        setIsViewfinderActive(true);
       }
     } catch (err) {
       console.warn('Could not launch homepage camera preview track:', err);
@@ -237,7 +244,7 @@ export default function Home() {
   };
 
   // VOICE QUESTION ON HOMEPAGE
-  const handleHomeTapAndSpeakToggle = () => {
+  const handleHomeTapAndSpeakToggle = async () => {
     if (isHomeAiProcessing || !homeVideoRef.current) return;
     if (isHomeVoiceRecording && homeMediaRecorderRef.current) {
       setIsHomeVoiceRecording(false);
@@ -245,19 +252,24 @@ export default function Home() {
       return;
     }
 
-    if (homeStreamRef.current && typeof MediaRecorder !== 'undefined') {
+    if (typeof MediaRecorder !== 'undefined') {
       try {
         homeAudioChunksRef.current = [];
-        const audioTracks = homeStreamRef.current.getAudioTracks();
-        if (audioTracks.length === 0) return;
+        let audioStream: MediaStream;
+        try {
+          audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (micErr) {
+          handleHomeAskGoogle(undefined, "Describe what physical object appears right inside this camera view out loud.");
+          return;
+        }
 
-        const recordStream = new MediaStream([audioTracks[0]]);
-        let recorder = new MediaRecorder(recordStream);
+        let recorder = new MediaRecorder(audioStream);
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) homeAudioChunksRef.current.push(e.data);
         };
         recorder.onstop = async () => {
           setIsHomeVoiceRecording(false);
+          audioStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
           setHomeStatus('Evaluating visual parameters out loud...');
           const audioBlob = new Blob(homeAudioChunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
@@ -292,7 +304,9 @@ export default function Home() {
         homeMediaRecorderRef.current = recorder;
         setIsHomeVoiceRecording(true);
         setHomeStatus('🎙️ Listening... Speak your question aloud and tap ✨ again when done');
-      } catch (e) {}
+      } catch (e) {
+        handleHomeAskGoogle(undefined, "Describe what physical object appears right inside this camera view out loud.");
+      }
     }
   };
 

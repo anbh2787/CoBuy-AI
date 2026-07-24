@@ -290,34 +290,41 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           localStreamRef.current = null;
           if (localVideoRef.current) localVideoRef.current.srcObject = null;
         }
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 250));
 
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: true
-          });
-        } catch (exactErr) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: true
-          });
-        }
-        localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          localVideoRef.current.play().catch(() => {});
+        let stream: MediaStream | null = null;
+        const constraintsList = [
+          { video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
+          { video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
+          { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
+          { video: true, audio: true },
+          { video: { facingMode: mode }, audio: false },
+          { video: true, audio: false }
+        ];
+
+        for (const c of constraintsList) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(c as any);
+            if (stream) break;
+          } catch (err) { /* try next fallback */ }
         }
 
-        if (channelRef.current && currentUser) {
-          channelRef.current.send({
-            type: 'broadcast',
-            event: 'peer-join',
-            payload: { userId: currentUser.id, userName: currentUser.name }
-          });
+        if (stream) {
+          localStreamRef.current = stream;
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+            localVideoRef.current.play().catch(() => {});
+          }
+
+          if (channelRef.current && currentUser) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'peer-join',
+              payload: { userId: currentUser.id, userName: currentUser.name }
+            });
+          }
+          return true;
         }
-        return true;
       }
       return false;
     } catch (err: any) {
