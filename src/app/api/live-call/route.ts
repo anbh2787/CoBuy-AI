@@ -53,12 +53,13 @@ Analyze the literal physical pixels across the provided picture right above.
 ${instructionContext}
 
 Strict conversational rules for spoken voice delivery:
-1. FIRST answer directly out loud what object lies beneath the tapped coordinates! If evaluating a touch target, state clearly right across speakers what specific item sits beneath the ring along with typical estimated retail price.
-2. ZERO-BIAS FACTUAL GROUNDING: Base all evaluation strictly on physical items visible inside this picture.
-3. EXTREME BREVITY RULE: Keep your spoken answer short, punchy, and concise—exactly 1 short conversational sentence (under 20 words max). Never read long lists or paragraphs out loud.
-4. If this is a touch identification, structure your output precisely with a concise label tag formatted right right as [LABEL: Short Item Name (~$Price)] at the very beginning of your sentence right so our UI can pin the target badge directly right over the coordinate crosshairs!
-   - Example format: "[LABEL: Chatham Armchair (~$310)] That decorative white armchair where you tapped goes right around $310 across retail."
-5. Do not include raw markdown asterisks inside your response text.
+1. AUDIO TRANSCRIPTION REQUIREMENT: If a voice recording is attached, start your text output with a transcript tag formatted as [USER_SAID: "Exact words user spoke in the recording"]. If no audio is attached or silent, format as [USER_SAID: "${questionText || 'Visual Inspection'}"].
+2. FIRST answer directly out loud what object lies beneath the targeted view! State clearly what specific item sits in view along with typical estimated retail price.
+3. ZERO-BIAS FACTUAL GROUNDING: Base all evaluation strictly on physical items visible inside this picture and the user's spoken question.
+4. EXTREME BREVITY RULE: Keep your spoken answer short, punchy, and concise—exactly 1 short conversational sentence (under 20 words max).
+5. If this is a touch identification, structure your output precisely with a concise label tag formatted as [LABEL: Short Item Name (~$Price)] right after [USER_SAID: "..."].
+   - Example format: '[USER_SAID: "How much is that chair?"] [LABEL: Armchair (~$280)] That floral armchair goes for around $280 across stores.'
+6. Do not include raw markdown asterisks inside your response text.
 `;
         parts.push({ text: prompt });
 
@@ -76,18 +77,37 @@ Strict conversational rules for spoken voice delivery:
         const data = await apiRes.json();
         if (data && data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
           const responseText = data.candidates[0].content.parts[0].text;
+          const userSaidMatch = responseText.match(/\[USER_SAID:\s*"(.*?)"\]/i) || responseText.match(/\[USER_SAID:\s*([^\]]+)\]/i);
+          const extractedUserSaid = userSaidMatch ? userSaidMatch[1].trim() : (questionText || (audioBase64 ? "Spoken Voice Question" : "Visual Scan"));
           const labelMatch = responseText.match(/\[LABEL:\s*([^\]]+)\]/i);
           const targetLabel = labelMatch ? labelMatch[1].trim() : undefined;
-          const cleanSpoken = responseText.replace(/\[LABEL:\s*[^\]]+\]/i, '').replace(/[*#_`~]/g, '').trim();
+          const cleanSpoken = responseText.replace(/\[USER_SAID:\s*[^\]]+\]/gi, '').replace(/\[LABEL:\s*[^\]]+\]/gi, '').replace(/[*#_`~]/g, '').trim();
 
-          console.log(`[GEMINI-LIVE-LOG] User: "${currentUserName || 'Anuj'}" | Question: "${questionText || (audioBase64 ? 'Voice Recording Uploaded' : 'Visual Scan')}" | Answer: "${cleanSpoken}"`);
+          console.log(`[GEMINI-LIVE-LOG] User: "${currentUserName || 'Anuj'}" | Said: "${extractedUserSaid}" | Answer: "${cleanSpoken}"`);
+
+          try {
+            fetch('https://split-chat-mu.vercel.app/api/voice-logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userName: currentUserName || 'Anuj',
+                userSaid: extractedUserSaid,
+                aiAnswer: cleanSpoken,
+                audioByteLength: audioBase64 ? audioBase64.length : 0,
+                frameByteLength: frameBase64 ? frameBase64.length : 0,
+                targetLabel: targetLabel
+              })
+            }).catch(() => {});
+          } catch (e) {}
 
           return NextResponse.json({
             spokenReply: cleanSpoken || `I verified the targeted visual item across our studio right now!`,
+            userSaid: extractedUserSaid,
             telemetry: {
               status: 'VALID_PIXELS_INSPECTED',
               byteLength: matches ? matches[1].length : frameBase64.length,
               audioBytes: audioBase64 ? audioBase64.length : 0,
+              userSaid: extractedUserSaid,
               opticalConclusion: cleanSpoken,
               targetLabel: targetLabel || (touchTarget ? cleanSpoken.split('.')[0] : undefined)
             }

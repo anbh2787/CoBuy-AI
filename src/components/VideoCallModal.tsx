@@ -65,6 +65,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [drawerInput, setDrawerInput] = useState('');
   const [studioQuestionInput, setStudioQuestionInput] = useState('');
   const [studioAiAnswer, setStudioAiAnswer] = useState<string | null>(null);
+  const [studioUserSaid, setStudioUserSaid] = useState<string | null>(null);
+  const [lastStudioAudioUrl, setLastStudioAudioUrl] = useState<string | null>(null);
   const [isMirrored, setIsMirrored] = useState<boolean>(true);
   const [selectedInspectPeerId, setSelectedInspectPeerId] = useState<string | null>(null);
 
@@ -684,6 +686,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           setIsVoiceRecording(false);
           setTelemetryStatus('Evaluating visual parameters right now...');
           const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          if (typeof window !== 'undefined') {
+            try { setLastStudioAudioUrl(URL.createObjectURL(audioBlob)); } catch(e){}
+          }
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64Audio = reader.result as string;
@@ -769,6 +774,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setIsAiProcessing(false);
         setIsAiSpeaking(true);
         setStudioAiAnswer(reply);
+        if (data.userSaid) setStudioUserSaid(data.userSaid);
         setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
         if (touchedCoords) {
@@ -1195,13 +1201,29 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
 
       {/* AI ANSWER DISPLAY CARD IN STUDIO ROOM */}
       {studioAiAnswer && (
-        <div className="mx-4 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl flex flex-col gap-1 text-left shrink-0 z-30 animate-in zoom-in-95 duration-150">
+        <div className="mx-4 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl flex flex-col gap-2 text-left shrink-0 z-30 animate-in zoom-in-95 duration-150">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1">
             <span className="font-black text-xs text-amber-400 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Google Gemini Answer
             </span>
-            <button onClick={() => setStudioAiAnswer(null)} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
+            <button onClick={() => { setStudioAiAnswer(null); setStudioUserSaid(null); }} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
           </div>
+
+          {studioUserSaid && (
+            <div className="bg-slate-900/90 p-2 px-3 rounded-xl border border-slate-800 text-[11px] text-amber-300 font-bold flex items-center justify-between gap-2">
+              <span className="truncate">🗣️ <strong>You asked:</strong> "{studioUserSaid}"</span>
+              {lastStudioAudioUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); new Audio(lastStudioAudioUrl).play(); }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] shrink-0 active:scale-95 shadow-md flex items-center gap-1"
+                >
+                  <span>▶ Play My Audio</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <p className="text-xs font-semibold leading-relaxed text-slate-100">{studioAiAnswer}</p>
         </div>
       )}

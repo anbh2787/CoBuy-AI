@@ -33,6 +33,8 @@ export default function Home() {
   const [homeTouchTarget, setHomeTouchTarget] = useState<{ x: number; y: number; label?: string; isLoading?: boolean } | null>(null);
   const [homeQuestionInput, setHomeQuestionInput] = useState('');
   const [homeAiAnswer, setHomeAiAnswer] = useState<string | null>(null);
+  const [homeUserSaid, setHomeUserSaid] = useState<string | null>(null);
+  const [lastHomeAudioUrl, setLastHomeAudioUrl] = useState<string | null>(null);
 
   const homeVideoRef = useRef<HTMLVideoElement | null>(null);
   const homeStreamRef = useRef<MediaStream | null>(null);
@@ -251,6 +253,9 @@ export default function Home() {
           audioStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
           setHomeStatus('Evaluating visual parameters out loud...');
           const audioBlob = new Blob(homeAudioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          if (typeof window !== 'undefined') {
+            try { setLastHomeAudioUrl(URL.createObjectURL(audioBlob)); } catch(e){}
+          }
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64Audio = reader.result as string;
@@ -273,6 +278,7 @@ export default function Home() {
               setIsHomeAiProcessing(false);
               setIsHomeAiSpeaking(true);
               setHomeAiAnswer(reply);
+              if (data.userSaid) setHomeUserSaid(data.userSaid);
               setHomeStatus(`Observation: "${reply}"`);
               speakWithHumanVoice(reply, () => setIsHomeAiSpeaking(false));
             } catch (err) { setIsHomeAiProcessing(false); }
@@ -570,13 +576,29 @@ export default function Home() {
 
           {/* AI ANSWER DISPLAY CARD ON HOMEPAGE */}
           {homeAiAnswer && (
-            <div className="relative z-30 mx-3 sm:mx-5 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-1.5 text-left">
+            <div className="relative z-30 mx-3 sm:mx-5 mb-2 p-3.5 rounded-2xl bg-slate-950/95 backdrop-blur-2xl border-2 border-amber-400 text-white shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-2 text-left">
               <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
                 <span className="font-black text-xs text-amber-400 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Google Gemini Answer
                 </span>
-                <button onClick={(e) => { e.stopPropagation(); setHomeAiAnswer(null); }} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
+                <button onClick={(e) => { e.stopPropagation(); setHomeAiAnswer(null); setHomeUserSaid(null); }} className="text-slate-400 hover:text-white p-1 text-xs font-bold">✕</button>
               </div>
+
+              {homeUserSaid && (
+                <div className="bg-slate-900/90 p-2 px-3 rounded-xl border border-slate-800 text-[11px] text-amber-300 font-bold flex items-center justify-between gap-2">
+                  <span className="truncate">🗣️ <strong>You asked:</strong> "{homeUserSaid}"</span>
+                  {lastHomeAudioUrl && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); new Audio(lastHomeAudioUrl).play(); }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] shrink-0 active:scale-95 shadow-md flex items-center gap-1"
+                    >
+                      <span>▶ Play My Audio</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               <p className="text-xs font-semibold leading-relaxed text-slate-100">{homeAiAnswer}</p>
             </div>
           )}
