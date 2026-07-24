@@ -65,6 +65,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [drawerInput, setDrawerInput] = useState('');
   const [studioQuestionInput, setStudioQuestionInput] = useState('');
   const [studioAiAnswer, setStudioAiAnswer] = useState<string | null>(null);
+  const [isMirrored, setIsMirrored] = useState<boolean>(true);
 
   // DIAGNOSTIC WEBRTC INSTRUMENTATION & RCA PANEL STATE
   const [rcaLogs, setRcaLogs] = useState<RcaLogEntry[]>([]);
@@ -500,9 +501,15 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   };
 
   const handleSwitchCamera = () => {
-    const nextMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(nextMode);
-    startLocalWebcam(nextMode);
+    const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile) {
+      setIsMirrored(!isMirrored);
+    } else {
+      const nextMode = facingMode === 'user' ? 'environment' : 'user';
+      setFacingMode(nextMode);
+      setIsMirrored(nextMode === 'user');
+      startLocalWebcam(nextMode);
+    }
   };
 
   // STEP 2: LOCAL VIDEO TOUCH-TO-IDENTIFY
@@ -1006,6 +1013,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               autoPlay
               playsInline
               muted
+              style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           )}
@@ -1185,31 +1193,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           <p className="text-xs font-semibold leading-relaxed text-slate-100">{studioAiAnswer}</p>
         </div>
       )}
-
-      {/* 💬 ASK GOOGLE AI TEXT & VOICE BAR IN STUDIO ROOM */}
-      <form
-        onSubmit={(e) => handleStudioAskGoogle(e)}
-        className="mx-3 sm:mx-6 mb-2 p-2 bg-slate-900/95 backdrop-blur-xl border border-amber-400/80 rounded-2xl shadow-2xl flex items-center gap-2 shrink-0 z-30"
-      >
-        <div className="pl-2 pr-1 flex items-center gap-1.5 text-amber-300 font-extrabold text-xs shrink-0">
-          <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-          <span className="hidden sm:inline">Ask Google AI:</span>
-        </div>
-        <input
-          type="text"
-          value={studioQuestionInput}
-          onChange={(e) => setStudioQuestionInput(e.target.value)}
-          placeholder="Ask anything about this room camera (e.g. price, features)..."
-          className="flex-1 bg-black/70 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
-        />
-        <button
-          type="submit"
-          disabled={isAiProcessing}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 shrink-0 active:scale-95 disabled:opacity-50"
-        >
-          {isAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Ask</span>}
-        </button>
-      </form>
 
       {/* CIRCULAR ICON-ONLY TOUCH DOCK */}
       <div className="bg-slate-900 border-t border-slate-800 h-16 sm:h-20 px-4 w-full flex items-center justify-around gap-2 shrink-0 z-30">

@@ -23,6 +23,7 @@ export default function Home() {
   // STEP 5: HOMEPAGE LIVE VIEWFINDER MIRROR & INTERACTIVE STUDIO STATE
   const [isViewfinderActive, setIsViewfinderActive] = useState<boolean>(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+  const [isMirrored, setIsMirrored] = useState<boolean>(true);
   const [isHomeAiProcessing, setIsHomeAiProcessing] = useState(false);
   const [isHomeAiSpeaking, setIsHomeAiSpeaking] = useState(false);
   const [isHomeVoiceRecording, setIsHomeVoiceRecording] = useState(false);
@@ -464,6 +465,7 @@ export default function Home() {
               autoPlay
               playsInline
               muted
+              style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           ) : (
@@ -554,12 +556,18 @@ export default function Home() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const next = cameraFacing === 'user' ? 'environment' : 'user';
-                  setCameraFacing(next);
-                  startHomeViewfinder(next);
+                  const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                  if (!isMobile) {
+                    setIsMirrored(!isMirrored);
+                  } else {
+                    const next = cameraFacing === 'user' ? 'environment' : 'user';
+                    setCameraFacing(next);
+                    setIsMirrored(next === 'user');
+                    startHomeViewfinder(next);
+                  }
                 }}
                 className="p-2 px-3 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-slate-700 text-amber-400 font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg"
-                title="Flip Camera Lens"
+                title="Flip Camera / Mirror View"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Flip
               </button>
@@ -580,43 +588,6 @@ export default function Home() {
               <p className="text-xs font-semibold leading-relaxed text-slate-100">{homeAiAnswer}</p>
             </div>
           )}
-
-          {/* 💬 ASK GOOGLE AI TEXT & VOICE BAR ON VIEWFINDER */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleHomeAskGoogle(e); }}
-            onClick={(e) => e.stopPropagation()}
-            className="relative z-20 mx-3 sm:mx-5 mb-3 p-2 bg-slate-900/95 backdrop-blur-xl border border-amber-400/80 rounded-2xl shadow-2xl flex items-center gap-2 pointer-events-auto"
-          >
-            <div className="pl-2.5 pr-1 flex items-center gap-1.5 text-amber-300 font-extrabold text-xs shrink-0">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span className="hidden sm:inline">Ask Google AI:</span>
-            </div>
-            <input
-              type="text"
-              value={homeQuestionInput}
-              onChange={(e) => setHomeQuestionInput(e.target.value)}
-              placeholder="Ask anything about this video (e.g. price, translation)..."
-              className="flex-1 bg-black/70 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-400 font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
-            />
-            <button
-              type="button"
-              onClick={() => handleHomeTapAndSpeakToggle()}
-              className={`p-2 px-3 rounded-xl font-extrabold text-xs transition flex items-center gap-1 shrink-0 ${
-                isHomeVoiceRecording ? 'bg-rose-600 text-white animate-bounce ring-2 ring-rose-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600'
-              }`}
-              title="Tap & Speak aloud"
-            >
-              {isHomeVoiceRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-brand-400" />}
-              <span className="hidden md:inline">{isHomeVoiceRecording ? 'Stop' : 'Voice'}</span>
-            </button>
-            <button
-              type="submit"
-              disabled={isHomeAiProcessing}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 shrink-0 active:scale-95 disabled:opacity-50"
-            >
-              {isHomeAiProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Ask</span>}
-            </button>
-          </form>
 
           {/* VIEWFINDER BOTTOM LAUNCH ACTION BAR */}
           <div className="relative z-10 p-4 sm:p-5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-auto">
