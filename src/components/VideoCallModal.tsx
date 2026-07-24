@@ -1158,18 +1158,51 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
               />
 
-              {/* REMOTE PEER ASK AI BUTTON */}
-              <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 pointer-events-auto">
+              {/* REMOTE PEER INTERACTIVE AI CONTROLS */}
+              <div className="absolute top-3 right-3 z-30 flex items-center gap-2 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const vid = e.currentTarget.closest('div')?.parentElement?.querySelector('video');
+                    if (!vid) return;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = vid.videoWidth || 1280;
+                    canvas.height = vid.videoHeight || 720;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+                    const base64Frame = canvas.toDataURL('image/jpeg', 0.85);
+
+                    setTelemetryStatus(`Translating foreign text on ${peer.peerName}'s camera...`);
+                    try {
+                      const res = await fetch('/api/translate-ar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ frameBase64: base64Frame, targetLanguage: 'English' })
+                      });
+                      const data = await res.json();
+                      if (data.translations && data.translations.length > 0) {
+                        setRemoteArMap(prev => ({ ...prev, [peer.peerId]: data.translations }));
+                        setTelemetryStatus(`AR Translate: Found ${data.translations.length} items on ${peer.peerName}'s screen!`);
+                      }
+                    } catch(err){}
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-black text-xs shadow-2xl flex items-center gap-1.5 active:scale-95 border border-white/20"
+                  title={`Translate AR text labels on ${peer.peerName}'s live camera feed`}
+                >
+                  <Globe className="w-3.5 h-3.5 animate-pulse" />
+                  <span>AR Translate</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    const vid = e.currentTarget.closest('div')?.querySelector('video');
                     setSelectedInspectPeerId(peer.peerId);
-                    captureFrameAndSendToAi(undefined, undefined, undefined, vid, peer.peerName);
+                    handleTapAndSpeakToggle();
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-black text-xs shadow-2xl flex items-center gap-1 active:scale-95 border border-white/20"
-                  title={`Ask Google AI about ${peer.peerName}'s live camera feed`}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:opacity-95 text-white font-black text-xs shadow-2xl flex items-center gap-1.5 active:scale-95 border border-white/20"
+                  title={`Ask Google AI about ${peer.peerName}'s live camera feed with voice`}
                 >
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" />
                   <span>Ask AI about {peer.peerName}</span>
