@@ -92,39 +92,18 @@ export default function Home() {
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (homeStreamRef.current) {
-          homeStreamRef.current.getTracks().forEach(t => {
-            try { t.stop(); } catch (e) {}
-          });
-          homeStreamRef.current = null;
-          if (homeVideoRef.current) homeVideoRef.current.srcObject = null;
+          homeStreamRef.current.getTracks().forEach(t => t.stop());
         }
-        await new Promise(r => setTimeout(r, 250));
-
-        let stream: MediaStream | null = null;
-        const constraintsList = [
-          { video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-          { video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-          { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-          { video: true, audio: false }
-        ];
-
-        for (const c of constraintsList) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(c as any);
-            if (stream) break;
-          } catch (err) { /* try next fallback */ }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        homeStreamRef.current = stream;
+        if (homeVideoRef.current) {
+          homeVideoRef.current.srcObject = stream;
+          homeVideoRef.current.play().catch(() => {});
         }
-
-        if (stream) {
-          homeStreamRef.current = stream;
-          if (homeVideoRef.current) {
-            homeVideoRef.current.srcObject = stream;
-            homeVideoRef.current.play().catch(() => {});
-          }
-          setIsViewfinderActive(true);
-        } else {
-          setIsViewfinderActive(false);
-        }
+        setIsViewfinderActive(true);
       }
     } catch (err) {
       console.warn('Could not launch homepage camera preview track:', err);
@@ -479,7 +458,6 @@ export default function Home() {
               autoPlay
               playsInline
               muted
-              style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           ) : (
@@ -570,18 +548,12 @@ export default function Home() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                  if (!isMobile) {
-                    setIsMirrored(!isMirrored);
-                  } else {
-                    const next = cameraFacing === 'user' ? 'environment' : 'user';
-                    setCameraFacing(next);
-                    setIsMirrored(next === 'user');
-                    startHomeViewfinder(next);
-                  }
+                  const next = cameraFacing === 'user' ? 'environment' : 'user';
+                  setCameraFacing(next);
+                  startHomeViewfinder(next);
                 }}
                 className="p-2 px-3 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-slate-700 text-amber-400 font-extrabold text-xs transition flex items-center gap-1.5 active:scale-95 shadow-lg"
-                title="Flip Camera / Mirror View"
+                title="Flip Camera Lens"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Flip
               </button>

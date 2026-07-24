@@ -284,47 +284,26 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(t => {
-            try { t.stop(); } catch (e) {}
+          localStreamRef.current.getTracks().forEach(t => t.stop());
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
+        }
+
+        if (channelRef.current && currentUser) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'peer-join',
+            payload: { userId: currentUser.id, userName: currentUser.name }
           });
-          localStreamRef.current = null;
-          if (localVideoRef.current) localVideoRef.current.srcObject = null;
         }
-        await new Promise(r => setTimeout(r, 250));
-
-        let stream: MediaStream | null = null;
-        const constraintsList = [
-          { video: { facingMode: { exact: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
-          { video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
-          { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
-          { video: true, audio: true },
-          { video: { facingMode: mode }, audio: false },
-          { video: true, audio: false }
-        ];
-
-        for (const c of constraintsList) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(c as any);
-            if (stream) break;
-          } catch (err) { /* try next fallback */ }
-        }
-
-        if (stream) {
-          localStreamRef.current = stream;
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-            localVideoRef.current.play().catch(() => {});
-          }
-
-          if (channelRef.current && currentUser) {
-            channelRef.current.send({
-              type: 'broadcast',
-              event: 'peer-join',
-              payload: { userId: currentUser.id, userName: currentUser.name }
-            });
-          }
-          return true;
-        }
+        return true;
       }
       return false;
     } catch (err: any) {
@@ -508,15 +487,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   };
 
   const handleSwitchCamera = () => {
-    const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (!isMobile) {
-      setIsMirrored(!isMirrored);
-    } else {
-      const nextMode = facingMode === 'user' ? 'environment' : 'user';
-      setFacingMode(nextMode);
-      setIsMirrored(nextMode === 'user');
-      startLocalWebcam(nextMode);
-    }
+    const nextMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(nextMode);
+    startLocalWebcam(nextMode);
   };
 
   // STEP 2: LOCAL VIDEO TOUCH-TO-IDENTIFY
@@ -1020,7 +993,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               autoPlay
               playsInline
               muted
-              style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
           )}
