@@ -74,6 +74,17 @@ export default function GroupChatRoom({ params }: PageProps) {
       setCurrentUser(profile);
 
       const roomData = await fetchGroupByCodeOrId(params.groupId);
+      if (roomData) {
+        const isPublic = roomData.id === 'public-demo-room' || roomData.inviteCode === 'public-demo-room' || roomData.title?.toLowerCase().includes('public') || params.groupId === 'public-demo-room' || params.groupId === 'public';
+        if (isPublic && profile && !roomData.members.some(m => m.id === profile.id)) {
+          roomData.members.push({
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            avatar: profile.avatar
+          });
+        }
+      }
       setGroup(roomData);
       setLoading(false);
     };
@@ -265,7 +276,8 @@ export default function GroupChatRoom({ params }: PageProps) {
     );
   }
 
-  const isAuthorizedMember = group.members.some(m => m.id === currentUser.id);
+  const isPublicRoom = group.id === 'public-demo-room' || group.inviteCode === 'public-demo-room' || group.title?.toLowerCase().includes('public') || params.groupId === 'public-demo-room' || params.groupId === 'public';
+  const isAuthorizedMember = isPublicRoom || group.members.some(m => m.id === currentUser.id);
   if (!isAuthorizedMember) {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-slate-950">
