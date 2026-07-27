@@ -562,10 +562,24 @@ export default function Home() {
             <div
               key={idx}
               style={{ left: `${Math.min(Math.max(item.x || 48, 20), 60)}%`, top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`, transform: 'translate(-50%, -50%)' }}
-              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
+              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/95 backdrop-blur-xl border-2 border-amber-400/90 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-2 text-left"
             >
-              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
-                <span>🏷️</span><span className="truncate">{item.title || item.translation}</span>
+              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span>🌐</span><span className="truncate">{item.title || item.translation}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHomeArTranslations([]);
+                    setIsHomeTranslateArActive(false);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 text-xs font-black shrink-0 active:scale-95"
+                  title="Dismiss AR Translation Overlay"
+                >
+                  ✕
+                </button>
               </div>
               {item.features && <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight"><strong className="text-emerald-400 font-bold">Features:</strong> {item.features}</div>}
               {item.instructions && <div className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-tight"><strong className="text-amber-300 font-bold">How to Use:</strong> {item.instructions}</div>}

@@ -1098,11 +1098,25 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                 top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`,
                 transform: 'translate(-50%, -50%)'
               }}
-              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
+              className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/95 backdrop-blur-xl border-2 border-amber-400/90 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-2 text-left"
             >
-              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
-                <span>🏷️</span>
-                <span className="truncate">{item.title || item.translation}</span>
+              <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span>🌐</span>
+                  <span className="truncate">{item.title || item.translation}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setArTranslations([]);
+                    setIsTranslateArActive(false);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 text-xs font-black shrink-0 active:scale-95"
+                  title="Dismiss AR Translation Overlay"
+                >
+                  ✕
+                </button>
               </div>
               
               {item.features && (
@@ -1164,6 +1178,16 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                   type="button"
                   onClick={async (e) => {
                     e.stopPropagation();
+                    if (remoteArMap[peer.peerId] && remoteArMap[peer.peerId].length > 0) {
+                      setRemoteArMap(prev => {
+                        const next = { ...prev };
+                        delete next[peer.peerId];
+                        return next;
+                      });
+                      setTelemetryStatus(`Cleared AR Translation for ${peer.peerName}`);
+                      return;
+                    }
+
                     const vid = e.currentTarget.closest('div')?.parentElement?.querySelector('video');
                     if (!vid) return;
                     const canvas = document.createElement('canvas');
@@ -1187,11 +1211,15 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                       }
                     } catch(err){}
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-black text-xs shadow-2xl flex items-center gap-1.5 active:scale-95 border border-white/20"
+                  className={`px-3 py-1.5 rounded-xl font-black text-xs shadow-2xl flex items-center gap-1.5 active:scale-95 border border-white/20 transition ${
+                    remoteArMap[peer.peerId]?.length
+                      ? 'bg-gradient-to-tr from-[#4285F4] via-[#34A853] to-[#FBBC05] text-white border-white animate-pulse'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white'
+                  }`}
                   title={`Translate AR text labels on ${peer.peerName}'s live camera feed`}
                 >
                   <Globe className="w-3.5 h-3.5 animate-pulse" />
-                  <span>AR Translate</span>
+                  <span>{remoteArMap[peer.peerId]?.length ? 'Clear AR' : 'AR Translate'}</span>
                 </button>
 
                 <button
@@ -1242,11 +1270,28 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
                     top: `${Math.min(Math.max(item.y || 48, 20), 70)}%`,
                     transform: 'translate(-50%, -50%)'
                   }}
-                  className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/90 backdrop-blur-xl border border-amber-400/80 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-none flex flex-col gap-2 text-left"
+                  className="absolute z-20 w-[88%] max-w-[320px] p-3 sm:p-4 rounded-3xl bg-[#22252A]/95 backdrop-blur-xl border-2 border-amber-400/90 text-amber-300 shadow-2xl animate-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-2 text-left"
                 >
-                  <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center gap-1.5">
-                    <span>🏷️</span>
-                    <span className="truncate">{item.title || item.translation}</span>
+                  <div className="font-extrabold text-white text-xs sm:text-sm tracking-tight border-b border-white/10 pb-1.5 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span>🌐</span>
+                      <span className="truncate">{item.title || item.translation}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRemoteArMap(prev => {
+                          const next = { ...prev };
+                          delete next[peer.peerId];
+                          return next;
+                        });
+                      }}
+                      className="text-slate-400 hover:text-white p-1 text-xs font-black shrink-0 active:scale-95"
+                      title="Dismiss AR Translation Overlay"
+                    >
+                      ✕
+                    </button>
                   </div>
                   
                   {item.features && (
