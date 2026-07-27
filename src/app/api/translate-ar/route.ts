@@ -25,28 +25,27 @@ export async function POST(req: Request) {
           },
           {
             text: `
-You are a comprehensive optical character recognition and visual translation engine inside a live camera stream (Google Lens AR style).
-Examine the physical container, bottle, menu, or signs shown right across the photograph.
+You are a succinct optical character recognition and visual translation engine inside a live camera stream (Google Lens AR style).
+Examine the physical container, bottle, menu, or signs shown across the photograph.
 
 Your exact instructions:
-1. Translate EVERY distinct section of text visible right across the physical object into ${targetLanguage} (` + `e.g. Japanese Kanji/Kana across product labels, ingredient lists, directions, cautions, and brand names` + `). Do NOT leave out essential directions or safety instructions!
-2. Group all detected text directly into ONE structured, multi-line translation dossier that reveals what all the visible Japanese or foreign paragraphs state across natural English.
-   - Organize clearly inside structured subfields:
-     🏷️ **Product Title & Brand**
-     ✨ **Features & Highlights**
-     📌 **Directions / How to Use**
-     ⚠️ **Precautions / Safety Notes**
-3. Return a STRICT JSON format block enclosed right inside \`\`\`json blocks containing this exact complete translation right below.
+1. EXTREME BREVITY RULE: Keep every section ultra-succinct, punchy, and bite-sized. Never output long paragraphs.
+2. Translate visible foreign text into ${targetLanguage} using strict length caps:
+   - "title": Brand & Item Name (MAX 5 WORDS)
+   - "features": Key Highlight (MAX 10 WORDS)
+   - "instructions": Main Usage Step (MAX 10 WORDS)
+   - "precautions": Main Safety Warning (MAX 10 WORDS)
+3. Return a STRICT JSON format block enclosed inside \`\`\`json blocks.
 
 Expected JSON schema inside response:
 \`\`\`json
 {
   "translations": [
     {
-      "title": "Hakugen Earth: Ice Non Cooling Spray for Clothing",
-      "features": "Extra cool mint aroma, disinfecting & long-lasting odor neutralization.",
-      "instructions": "Spray directly across clothing from 10cm before wearing for instant cooling.",
-      "precautions": "Do NOT spray directly onto bare skin or near open flame. Keep away from eyes.",
+      "title": "Ice Non Clothing Spray",
+      "features": "Extra mint aroma, long-lasting cooling",
+      "instructions": "Spray onto clothes 10cm away before wearing",
+      "precautions": "Do not spray on bare skin or near flames",
       "x": 45,
       "y": 45
     }
