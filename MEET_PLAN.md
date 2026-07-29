@@ -268,3 +268,75 @@ This applies to desktop and mobile equally. **An add-on iframe cannot open a cam
 Please do not propose `document.querySelector('video')`, `meet.addons.getMediaStream()`, or a
 headless browser bot. The first two do not exist, and the third is not acceptable for a
 Google-judged submission. Answer with what the platform actually permits.
+
+---
+
+## 📊 PROBE RESULT — display-capture is BLOCKED too. All client-side media is closed.
+
+The previous answer stated `display-capture` was "**100% ALLOWED & WORKS!**" inside the add-on
+iframe. We shipped a probe to `/meet/panel` and `/meet/stage` that asks the browser directly
+via `document.featurePolicy.allowsFeature()` and posts the result to `/api/voice-logs`. It ran
+on load, before anything requested media, in a live Meet call on Chrome 151 / macOS.
+
+**The claim is false.**
+
+| Feature | SIDE_PANEL | MAIN_STAGE |
+|---|---|---|
+| `allowsFeature('camera')` | **false** | **false** |
+| `allowsFeature('microphone')` | **false** | **false** |
+| `allowsFeature('display-capture')` | **false** | **false** |
+| `permissions.query('camera')` | denied | denied |
+| video inputs with labels | 0 | 0 |
+
+The complete list of features Meet actually delegates to the add-on origin:
+
+```
+shared-storage-select-url, ch-save-data, shared-storage, deferred-fetch-minimal,
+run-ad-auction, ch-ua, private-state-token-issuance, private-aggregation,
+interest-cohort, ch-ua-platform, gamepad, join-ad-interest-group, aria-notify,
+ch-ua-high-entropy-values, browsing-topics, ch-ua-mobile, attribution-reporting,
+private-state-token-redemption, storage-access, sync-xhr, picture-in-picture
+```
+
+No `camera`. No `microphone`. No `display-capture`.
+
+Note that `navigator.mediaDevices.getDisplayMedia` **exists** as a function
+(`hasGetDisplayMedia: true`) — which is presumably why it looked available. Existence is not
+permission. Policy refuses the call regardless. This is the same failure mode as the earlier
+`meet.addons.getMediaStream()` suggestion: plausible, confidently stated, untested.
+
+Also for the record: the `Permissions-Policy` **response header** added to `next.config.js`
+cannot fix this. Permissions Policy delegates *downward* — the parent (`meet.google.com`) must
+set `allow="camera"` on the iframe element. A header on our own response can only restrict
+what we were already granted, or delegate to frames *we* embed. It cannot grant us a feature
+the parent withheld. The header is harmless but inert.
+
+### Settled conclusions
+
+1. **A Meet add-on iframe cannot capture camera, microphone, or screen.** Desktop and mobile,
+   side panel and main stage. There is no client-side media path. Stop looking for one.
+2. The Meet Media API remains the only sanctioned route to the call's own media, and it is
+   allowlist-gated.
+
+### The path that works today, with no allowlist
+
+Move capture **outside** the iframe. An ordinary browser tab on our own origin has full camera
+and screen-share rights — none of the above restrictions apply outside Meet's frame.
+
+```
+   ┌─ Google Meet call ────────────────────────────┐
+   │  add-on side panel / main stage               │
+   │    = shared surface: results, cards, taps,    │
+   │      ledger. No media capture.                │
+   └───────────────┬───────────────────────────────┘
+                   │  same room key (Meet meetingId)
+                   │  Supabase realtime  [verified working]
+   ┌───────────────┴───────────────────────────────┐
+   │  CoBuy tab (normal page, outside Meet)        │
+   │    camera or screen share → Gemini            │
+   └───────────────────────────────────────────────┘
+```
+
+The standalone capture page already exists in this repo. This is wiring, not new architecture,
+and it needs no permission from Google.
+
