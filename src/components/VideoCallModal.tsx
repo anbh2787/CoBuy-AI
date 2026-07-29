@@ -139,6 +139,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const studioVisualMemoryRef = useRef<Array<{ id: string; timestamp: number; base64Frame: string }>>([]);
   const studioMemorySamplerRef = useRef<any>(null);
   const blankProbeRef = useRef<any>(null);
+  const cameraRetryRef = useRef<any>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -442,9 +443,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
             if (probeFrameIsBlank(video)) {
               const multipleCameras = videoDevices.length > 1;
               const advice = multipleCameras
-                ? 'Pick a different camera from the dropdown above.'
-                : 'This is your only camera and Meet is using it. Turn Meet\'s camera off, then tap Try again.';
-              setCameraError(`The camera opened but is sending a blank picture. ${advice}`);
+                ? 'Pick a different camera above, or turn Meet\'s camera off.'
+                : 'Turn your camera OFF in Meet — CoBuy will pick it up automatically.';
+              setCameraError(`Meet is still using the camera. ${advice}`);
               setTelemetryStatus('⚠️ Camera opened but is sending blank frames.');
               logRcaInstrument('CAMERA_BLANK', `Stream live but frames are black. deviceCount=${videoDevices.length}`);
             }
@@ -670,6 +671,36 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const handleRetryCamera = () => {
     startLocalWebcam(facingMode, selectedDeviceId || undefined);
   };
+
+  /**
+   * Meet holds the camera for as long as its own video is on, and there is no API to
+   * turn that off from inside an add-on. So instead of asking the user to press a button
+   * at exactly the right moment, keep reaching for the camera while it is unavailable —
+   * the instant Meet releases it, the studio comes alive on its own.
+   *
+   * The interval is longer than the blank-frame probe so the two do not race.
+   */
+  useEffect(() => {
+    if (!isOpen || !cameraError || videoDisabled) {
+      if (cameraRetryRef.current) {
+        clearInterval(cameraRetryRef.current);
+        cameraRetryRef.current = null;
+      }
+      return;
+    }
+
+    if (cameraRetryRef.current) return;
+    cameraRetryRef.current = setInterval(() => {
+      startLocalWebcam(facingMode, selectedDeviceId || undefined);
+    }, 3500);
+
+    return () => {
+      if (cameraRetryRef.current) {
+        clearInterval(cameraRetryRef.current);
+        cameraRetryRef.current = null;
+      }
+    };
+  }, [isOpen, cameraError, videoDisabled, facingMode, selectedDeviceId]);
 
   // STEP 2: LOCAL VIDEO TOUCH-TO-IDENTIFY
   const handleTouchIdentify = async (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1220,14 +1251,17 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           {cameraError && !videoDisabled && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-slate-950/95 px-6 text-center">
               <VideoOff className="w-10 h-10 text-amber-400" />
-              <p className="text-xs font-black text-white">No camera feed</p>
+              <p className="text-xs font-black text-white">Waiting for the camera</p>
               <p className="text-[11px] text-slate-300 max-w-xs leading-relaxed">{cameraError}</p>
+              <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" /> Retrying automatically…
+              </p>
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleRetryCamera(); }}
                 className="mt-1 text-[11px] font-black bg-white text-slate-950 rounded-lg px-3 py-1.5 active:scale-95 transition"
               >
-                Try again
+                Try now
               </button>
             </div>
           )}
