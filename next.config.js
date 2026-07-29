@@ -14,6 +14,10 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: 'frame-ancestors https://meet.google.com https://*.meet.google.com',
           },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self "https://meet.google.com" "https://*.meet.google.com"), microphone=(self "https://meet.google.com" "https://*.meet.google.com"), display-capture=(self "https://meet.google.com" "https://*.meet.google.com")',
+          },
         ],
       },
     ];
