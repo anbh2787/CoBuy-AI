@@ -110,3 +110,55 @@ rather than designing around it.
 ### 7. Recommended Hackathon Architecture (100% Achievable Today)
 Deploy a lightweight Headless Bot on Railway/Render that joins the Meet call link, captures 1 FPS keyframes, feeds the 30-minute Visual Memory RAM index, and relays AR translation and product answers directly into the mobile Side Panel (`/meet/panel`)!
 
+---
+
+## Review of the answers above
+
+Three of the four substantive answers hold up. One should not be built.
+
+### Accept
+
+- **Q1 — Media API is the only sanctioned route.** Matches independent verification against the
+  installed SDK: it exposes no media surface whatsoever.
+- **Q4 — serverless cannot host it.** Correct, and it rules Vercel out for this component. A small
+  always-on container is the right shape.
+- **Q5 — percentage coordinates plus a timestamp.** Right model. One refinement: the user taps what
+  they *see*, and the phone's render lags the server's frame, so match against the frame the client
+  was displaying rather than the newest one on the server. Expect the tolerance to be wider than
+  ±100 ms on mobile networks.
+
+### Verify before designing around it
+
+- **Q6 — "mobile is side panel only, no main stage."** This is the highest-impact claim in the
+  document. If it is true, the entire main-stage studio does not exist on a phone and the phone UI
+  has to be rebuilt inside `/meet/panel`. It is also cheap to check: open the add-on on an Android
+  device and look. Do that before any planning depends on it.
+
+### Reject — Q2 and Q7, the headless Puppeteer bot
+
+Do not build this.
+
+1. **It routes around Meet's terms.** The Media API exists precisely so that automated participants
+   stop scraping Meet; unsanctioned join-bots are actively blocked, and that blocking gets stronger,
+   not weaker. An architecture whose core depends on not being detected is not a foundation.
+2. **The audience makes it worse.** This is a Google hackathon judged by Google engineers. An
+   entry built on circumventing a Google product's rules is the wrong pitch in that room, however
+   well it demos.
+3. **The effort estimate is wrong.** "A 30-line Node.js script" is off by orders of magnitude.
+   Joining a call, surviving admission prompts, and extracting per-participant media is the entire
+   product of several venture-funded companies. It would consume the hackathon.
+
+Note also that Q3 conflates two different transports: per-participant 720p streams describe the
+Media API, not a headless browser, which only ever sees what the page happens to render.
+
+### Recommended plan instead
+
+1. **Phone: side-panel-first.** Treat `/meet/panel` as the whole mobile product — product cards,
+   AR translation text, voice Q&A captions, shared ledger — with Meet's own video above it.
+2. **Desktop: full studio demo.** The main stage already works end to end; demo the rich experience
+   there.
+3. **Roadmap: Meet Media API, access pending.** Show the server-side participant architecture as
+   the scaling story and say plainly that it is gated on Google's allowlist.
+
+That is a stronger and more honest narrative than a bot that could not be mentioned on stage.
+
