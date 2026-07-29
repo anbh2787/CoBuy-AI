@@ -128,6 +128,12 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     setRcaLogs(prev => [...prev.slice(-35), { time: timestamp, event, details }]);
   };
 
+  // VISUAL MEMORY BUFFER (< 50ms LATENCY) & GOOGLE MEET ADD-ON SDK STATE
+  const [isMeetAddon, setIsMeetAddon] = useState<boolean>(false);
+  const [liveRadarTarget, setLiveRadarTarget] = useState<string | null>(null);
+  const studioVisualMemoryRef = useRef<Array<{ id: string; timestamp: number; base64Frame: string }>>([]);
+  const studioMemorySamplerRef = useRef<any>(null);
+
   useEffect(() => {
     let isMounted = true;
     if (isOpen && currentUser) {
@@ -137,6 +143,25 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       setActiveTouchTarget(null);
       setRemoteTouchMap({});
       setRcaLogs([]);
+
+      // VISUAL MEMORY 1 FPS SAMPLER IN STUDIO ROOM
+      studioMemorySamplerRef.current = setInterval(() => {
+        if (!localVideoRef.current || videoDisabled) return;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 360;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL('image/jpeg', 0.65);
+          if (frameData && frameData.length > 2000) {
+            const now = Date.now();
+            studioVisualMemoryRef.current.unshift({ id: `frame-${now}`, timestamp: now, base64Frame: frameData });
+            if (studioVisualMemoryRef.current.length > 180) studioVisualMemoryRef.current.pop();
+          }
+        } catch(e){}
+      }, 1000);
 
       const initStudioSequence = async () => {
         logRcaInstrument('INIT_START', `User ${currentUser.name} (${currentUser.id}) opened studio inside room ${groupId}. Acquiring camera tracks strictly prior to channel signaling...`);

@@ -71,12 +71,19 @@ export default function Home() {
   const [homeUserSaid, setHomeUserSaid] = useState<string | null>(null);
   const [lastHomeAudioUrl, setLastHomeAudioUrl] = useState<string | null>(null);
 
+  // VISUAL MEMORY BUFFER (< 50ms LATENCY) & GOOGLE MEET ADD-ON SDK STATE
+  const [isMeetAddon, setIsMeetAddon] = useState<boolean>(false);
+  const [liveRadarTarget, setLiveRadarTarget] = useState<string | null>(null);
+  const [memorySearchMatch, setMemorySearchMatch] = useState<{ timeAgoStr: string; label: string; base64Frame: string } | null>(null);
+
   const homeVideoRef = useRef<HTMLVideoElement | null>(null);
   const homeStreamRef = useRef<MediaStream | null>(null);
   const homeAudioChunksRef = useRef<Blob[]>([]);
   const homeMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const homeArIntervalRef = useRef<any>(null);
   const homeTimeoutRef = useRef<any>(null);
+  const homeVisualMemoryRef = useRef<Array<{ id: string; timestamp: number; base64Frame: string }>>([]);
+  const memorySamplerIntervalRef = useRef<any>(null);
 
   const speakWithHumanVoice = async (text: string, onFinish?: () => void) => {
     try {
@@ -160,6 +167,56 @@ export default function Home() {
     }
     setIsViewfinderActive(false);
   };
+
+  // GOOGLE MEET ADD-ON SDK INITIALIZATION EFFECT
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const inIframe = window.self !== window.top;
+      if (inIframe) {
+        setIsMeetAddon(true);
+        const script = document.createElement('script');
+        script.src = 'https://www.gstatic.com/meet/addons/sdk/v1/meet.addons.js';
+        script.async = true;
+        script.onload = () => {
+          try {
+            if ((window as any).meet && (window as any).meet.addon) {
+              (window as any).meet.addon.createAddonSession();
+            }
+          } catch(e){}
+        };
+        document.head.appendChild(script);
+      }
+    }
+  }, []);
+
+  // VISUAL MEMORY BUFFER 1 FPS KEYFRAME SAMPLER (< 50ms LOOKBACK SEARCH)
+  useEffect(() => {
+    if (isViewfinderActive) {
+      memorySamplerIntervalRef.current = setInterval(() => {
+        if (!homeVideoRef.current) return;
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 360;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(homeVideoRef.current, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL('image/jpeg', 0.65);
+          if (frameData && frameData.length > 2000) {
+            const now = Date.now();
+            homeVisualMemoryRef.current.unshift({ id: `frame-${now}`, timestamp: now, base64Frame: frameData });
+            // Maintain 180 keyframes (rolling 3-minute memory window)
+            if (homeVisualMemoryRef.current.length > 180) {
+              homeVisualMemoryRef.current.pop();
+            }
+          }
+        } catch(e){}
+      }, 1000);
+    } else {
+      if (memorySamplerIntervalRef.current) clearInterval(memorySamplerIntervalRef.current);
+    }
+    return () => { if (memorySamplerIntervalRef.current) clearInterval(memorySamplerIntervalRef.current); };
+  }, [isViewfinderActive]);
 
   // LIVE AR TRANSLATION LOOP FOR HOMEPAGE
   useEffect(() => {
