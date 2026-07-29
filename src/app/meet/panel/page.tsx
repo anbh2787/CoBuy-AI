@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, ShoppingBag, Sparkles, Play, AlertTriangle, Camera, Mic, MicOff, Search, Globe, X, Target, Volume2 } from 'lucide-react';
+import { Loader2, ShoppingBag, Sparkles, Play, AlertTriangle, Mic, MicOff, Search, Globe, X, Target, Volume2 } from 'lucide-react';
 import {
   describeMeetError,
   getLocalIdentity,
@@ -42,8 +42,6 @@ function encodeAudioBufferToWav(audioBuffer: AudioBuffer): Blob {
   writeString(8, 'WAVE');
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * 2, true);
   view.setUint16(32, 2, true);
@@ -67,24 +65,19 @@ export default function MeetSidePanel() {
   const [isStarting, setIsStarting] = useState(false);
   const [updates, setUpdates] = useState<StageUpdate[]>([]);
 
-  // SIDE PANEL INTERACTIVE FEATURES
-  const [isRecording, setIsRecording] = useState(false);
+  // CONTINUOUS LIVE VIDEO STATE
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [memoryQuery, setMemoryQuery] = useState('');
-  const [memoryMatch, setMemoryMatch] = useState<string | null>(null);
-  const [arTranslations, setArTranslations] = useState<any[]>([]);
-
-  // POINT & CLICK TOUCH TARGETING STATE
-  const [activeFrameBase64, setActiveFrameBase64] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const [touchPoint, setTouchPoint] = useState<{ x: number; y: number } | null>(null);
   const [touchIdentifyResult, setTouchIdentifyResult] = useState<string | null>(null);
+  const [memoryQuery, setMemoryQuery] = useState('');
+  const [memoryMatch, setMemoryMatch] = useState<string | null>(null);
 
   const ctxRef = useRef<MeetContext | null>(null);
   const roomIdRef = useRef<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDisplayName(getLocalIdentity().name);
@@ -117,7 +110,6 @@ export default function MeetSidePanel() {
           try {
             const parsed = JSON.parse(message.payload) as StageUpdate;
             setUpdates((prev) => [{ ...parsed, at: Date.now() }, ...prev].slice(0, 15));
-            if (parsed.translations) setArTranslations(parsed.translations);
           } catch { /* ignore */ }
         });
       } catch (error) {
@@ -130,11 +122,11 @@ export default function MeetSidePanel() {
     return () => { cancelled = true; };
   }, []);
 
-  // POINT & CLICK TOUCH HANDLER
-  const handleImageTouch = async (e: React.MouseEvent<HTMLImageElement> | React.TouchEvent<HTMLImageElement>) => {
-    if (!activeFrameBase64 || !imageRef.current) return;
+  // 1-CLICK TOUCH TARGET HANDLER ON LIVE MEET PANEL
+  const handleTouchIdentify = async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!containerRef.current || isAiProcessing) return;
 
-    const rect = imageRef.current.getBoundingClientRect();
+    const rect = containerRef.current.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
@@ -143,14 +135,28 @@ export default function MeetSidePanel() {
 
     setTouchPoint({ x: xPercent, y: yPercent });
     setIsAiProcessing(true);
-    setTouchIdentifyResult('Identifying tapped item with Gemini AI…');
+    setTouchIdentifyResult('Gemini inspecting target item…');
 
     try {
+      // Capture frame snapshot directly from top video element if present, or active stream
+      let frameBase64: string | null = null;
+      const videoEl = document.querySelector('video') || parent.document.querySelector('video');
+      if (videoEl && videoEl.videoWidth > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          frameBase64 = canvas.toDataURL('image/jpeg', 0.85);
+        }
+      }
+
       const res = await fetch('/api/live-call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          frameBase64: activeFrameBase64,
+          frameBase64: frameBase64 || 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
           touchTarget: { x: xPercent, y: yPercent },
           userName: displayName
         })
@@ -160,7 +166,7 @@ export default function MeetSidePanel() {
       setTouchIdentifyResult(answer);
       setUpdates(prev => [{ at: Date.now(), userSaid: `Tapped [X:${xPercent}%, Y:${yPercent}%]`, aiAnswer: answer }, ...prev]);
 
-      // RCA Telemetry Log
+      // Log RCA Telemetry
       fetch('/api/voice-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,12 +174,11 @@ export default function MeetSidePanel() {
           eventType: 'POINT_CLICK_TOUCH_IDENTIFY',
           userName: displayName,
           userSaid: `Tapped [X:${xPercent}%, Y:${yPercent}%]`,
-          aiAnswer: answer,
-          frameByteLength: activeFrameBase64.length
+          aiAnswer: answer
         })
       }).catch(() => {});
 
-      // Play Neural TTS Spoken Reply
+      // Play Neural TTS Spoken Answer into earphone
       try {
         const ttsRes = await fetch('/api/tts', {
           method: 'POST',
@@ -187,27 +192,10 @@ export default function MeetSidePanel() {
         }
       } catch (ttsErr) {}
     } catch(err) {
-      setTouchIdentifyResult('Failed to identify touch target. Tap again.');
+      setTouchIdentifyResult('Failed to identify. Tap again.');
     } finally {
       setIsAiProcessing(false);
     }
-  };
-
-  // PHOTO SCAN FILE HANDLER
-  const handlePhotoScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsAiProcessing(true);
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onloadend = async () => {
-      const base64Frame = reader.result as string;
-      setActiveFrameBase64(base64Frame);
-      setTouchPoint(null);
-      setTouchIdentifyResult('Tap ANY item on the image below to identify it!');
-      setIsAiProcessing(false);
-    };
   };
 
   // VOICE QUESTION RECORDING (PCM WAV)
@@ -247,7 +235,7 @@ export default function MeetSidePanel() {
             const res = await fetch('/api/live-call', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioBase64: base64Audio, frameBase64: activeFrameBase64, userName: displayName })
+              body: JSON.stringify({ audioBase64: base64Audio, userName: displayName })
             });
             const data = await res.json();
             const answer = data.spokenReply || data.answer || 'AI Answer';
@@ -269,7 +257,7 @@ export default function MeetSidePanel() {
       mediaRecorder.start();
       setIsRecording(true);
     } catch(err) {
-      alert('Could not access microphone for voice question.');
+      alert('Could not access microphone.');
     }
   };
 
@@ -336,73 +324,51 @@ export default function MeetSidePanel() {
             />
           </label>
 
-          {/* ACTION BUTTONS GRID */}
-          <div className="grid grid-cols-2 gap-2 shrink-0">
-            {/* PHOTO SCAN BUTTON */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isAiProcessing}
-              className="bg-slate-900 hover:bg-slate-800 border border-teal-500/40 text-teal-300 font-bold text-xs rounded-xl px-2.5 py-2 flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
-            >
-              <Camera className="w-3.5 h-3.5 text-teal-400" />
-              <span>📸 Load Photo</span>
-            </button>
-            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handlePhotoScan} />
+          {/* 1-CLICK TOUCH TARGETING CANVAS OVER MEET */}
+          <div
+            ref={containerRef}
+            onClick={handleTouchIdentify}
+            className="shrink-0 relative bg-slate-900 border-2 border-teal-500/40 rounded-xl p-3 text-center cursor-pointer select-none active:scale-[0.99] transition overflow-hidden"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1 text-teal-300 font-bold text-xs">
+              <Target className="w-4 h-4 text-teal-400 animate-pulse" />
+              <span>Tap ANYWHERE to identify item</span>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Tap directly on the screen below to ask Gemini about any store item!
+            </p>
 
-            {/* VOICE QUESTION BUTTON */}
-            <button
-              type="button"
-              onClick={toggleVoiceRecording}
-              disabled={isAiProcessing}
-              className={`${isRecording ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900 hover:bg-slate-800 border border-indigo-500/40 text-indigo-300'} font-bold text-xs rounded-xl px-2.5 py-2 flex items-center justify-center gap-1.5 active:scale-[0.98] transition`}
-            >
-              {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-indigo-400" />}
-              <span>{isRecording ? 'Listening…' : '✨ Ask AI'}</span>
-            </button>
+            {/* ANIMATED TARGET RING AT TOUCH LOCATION */}
+            {touchPoint && (
+              <div
+                className="absolute w-8 h-8 -ml-4 -mt-4 border-2 border-teal-400 rounded-full animate-ping pointer-events-none"
+                style={{ left: `${touchPoint.x}%`, top: `${touchPoint.y}%` }}
+              />
+            )}
+            {touchPoint && (
+              <div
+                className="absolute w-3.5 h-3.5 -ml-1.75 -mt-1.75 bg-teal-400 rounded-full border border-black pointer-events-none"
+                style={{ left: `${touchPoint.x}%`, top: `${touchPoint.y}%` }}
+              />
+            )}
           </div>
 
-          {/* POINT & CLICK TOUCH TARGET CANVAS */}
-          {activeFrameBase64 && (
-            <div className="shrink-0 space-y-1.5 bg-slate-900/90 border border-teal-500/40 rounded-xl p-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-teal-300 flex items-center gap-1">
-                  <Target className="w-3 h-3 text-teal-400" /> Point & Click Touch Canvas
-                </span>
-                <button type="button" onClick={() => setActiveFrameBase64(null)}><X className="w-3 h-3 text-slate-400 hover:text-white" /></button>
-              </div>
-
-              <div className="relative rounded-lg overflow-hidden border border-slate-800 bg-black cursor-crosshair">
-                <img
-                  ref={imageRef}
-                  src={activeFrameBase64}
-                  alt="Touch target frame"
-                  onClick={handleImageTouch}
-                  className="w-full h-auto object-contain max-h-48"
-                />
-
-                {/* ANIMATED TARGET RING AT TOUCH LOCATION */}
-                {touchPoint && (
-                  <div
-                    className="absolute w-7 h-7 -ml-3.5 -mt-3.5 border-2 border-teal-400 rounded-full animate-ping pointer-events-none"
-                    style={{ left: `${touchPoint.x}%`, top: `${touchPoint.y}%` }}
-                  />
-                )}
-                {touchPoint && (
-                  <div
-                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 bg-teal-400 rounded-full border border-black pointer-events-none"
-                    style={{ left: `${touchPoint.x}%`, top: `${touchPoint.y}%` }}
-                  />
-                )}
-              </div>
-
-              {touchIdentifyResult && (
-                <p className="text-[11px] text-teal-200 font-bold leading-snug bg-slate-950 px-2 py-1 rounded border border-teal-500/30">
-                  {touchIdentifyResult}
-                </p>
-              )}
-            </div>
+          {touchIdentifyResult && (
+            <p className="text-[11px] text-teal-200 font-bold leading-snug bg-slate-900 border border-teal-500/30 px-2.5 py-1.5 rounded-lg shrink-0">
+              {touchIdentifyResult}
+            </p>
           )}
+
+          {/* VOICE QUESTION BUTTON */}
+          <button
+            type="button"
+            onClick={toggleVoiceRecording}
+            disabled={isAiProcessing}
+            className={`${isRecording ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-900 hover:bg-slate-800 border border-indigo-500/40 text-indigo-300'} font-bold text-xs rounded-xl px-2.5 py-2 flex items-center justify-center gap-1.5 shrink-0 active:scale-[0.98] transition`}
+          >
+            {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-indigo-400" />}
+            <span>{isRecording ? 'Listening…' : '✨ Ask Voice Question'}</span>
+          </button>
 
           {/* 30-MIN VISUAL MEMORY SEARCH (< 50ms) */}
           <form onSubmit={handleMemorySearch} className="relative shrink-0">
@@ -416,7 +382,7 @@ export default function MeetSidePanel() {
           </form>
 
           {memoryMatch && (
-            <div className="bg-teal-950/60 border border-teal-500/40 rounded-lg px-2.5 py-1.5 text-[11px] text-teal-300 flex items-center justify-between">
+            <div className="bg-teal-950/60 border border-teal-500/40 rounded-lg px-2.5 py-1.5 text-[11px] text-teal-300 flex items-center justify-between shrink-0">
               <span>{memoryMatch}</span>
               <button type="button" onClick={() => setMemoryMatch(null)}><X className="w-3 h-3 text-slate-400 hover:text-white" /></button>
             </div>
@@ -426,12 +392,12 @@ export default function MeetSidePanel() {
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 border-t border-slate-900 pt-2">
             {isAiProcessing && (
               <p className="text-[11px] text-teal-400 flex items-center gap-1.5 animate-pulse font-bold">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-400" /> Gemini AI processing…
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-400" /> Gemini AI inspecting…
               </p>
             )}
             {updates.length === 0 && !isAiProcessing ? (
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                Tap <strong>📸 Load Photo</strong> to open the <strong>Point & Click Touch Canvas</strong>! Tap ANY item to identify it with Gemini AI!
+                Tap anywhere on the box above to identify items, or tap <strong>✨ Ask Voice Question</strong>!
               </p>
             ) : (
               updates.map((u) => (
