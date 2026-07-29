@@ -138,6 +138,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [liveRadarTarget, setLiveRadarTarget] = useState<string | null>(null);
   const studioVisualMemoryRef = useRef<Array<{ id: string; timestamp: number; base64Frame: string }>>([]);
   const studioMemorySamplerRef = useRef<any>(null);
+  const blankProbeRef = useRef<any>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -358,6 +359,35 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
+  /**
+   * getUserMedia can succeed and still deliver nothing but black frames — that is what
+   * happens when another app already owns the sensor. No error is thrown, so the only way
+   * to catch it is to look at the pixels.
+   *
+   * Sampled coarsely, and judged on the BRIGHTEST pixel rather than the average, so a
+   * genuinely dim room is not mistaken for a dead feed.
+   */
+  const probeFrameIsBlank = (video: HTMLVideoElement): boolean => {
+    try {
+      if (!video.videoWidth || !video.videoHeight) return true;
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 18;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return false;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let brightest = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const luminance = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (luminance > brightest) brightest = luminance;
+      }
+      return brightest < 10;
+    } catch {
+      return false; // a tainted or not-yet-ready canvas is not evidence of a blank feed
+    }
+  };
+
   /** Push a freshly acquired track to peers already connected, so a camera switch is not local-only. */
   const republishVideoTrack = (stream: MediaStream) => {
     const videoTrack = stream.getVideoTracks()[0];
@@ -403,6 +433,22 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.play().catch(() => {});
+
+          // Give the sensor a moment to deliver real frames before judging it.
+          if (blankProbeRef.current) clearTimeout(blankProbeRef.current);
+          blankProbeRef.current = setTimeout(() => {
+            const video = localVideoRef.current;
+            if (!video || !localStreamRef.current) return;
+            if (probeFrameIsBlank(video)) {
+              const multipleCameras = videoDevices.length > 1;
+              const advice = multipleCameras
+                ? 'Pick a different camera from the dropdown above.'
+                : 'This is your only camera and Meet is using it. Turn Meet\'s camera off, then tap Try again.';
+              setCameraError(`The camera opened but is sending a blank picture. ${advice}`);
+              setTelemetryStatus('⚠️ Camera opened but is sending blank frames.');
+              logRcaInstrument('CAMERA_BLANK', `Stream live but frames are black. deviceCount=${videoDevices.length}`);
+            }
+          }, 1800);
         }
 
         if (channelRef.current && currentUser) {
@@ -959,6 +1005,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
     if (arSamplerIntervalRef.current) clearInterval(arSamplerIntervalRef.current);
     if (targetTimeoutRef.current) clearTimeout(targetTimeoutRef.current);
+    if (blankProbeRef.current) clearTimeout(blankProbeRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try { mediaRecorderRef.current.stop(); } catch (err) { /* no-op */ }
     }
