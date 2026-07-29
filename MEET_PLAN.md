@@ -173,3 +173,74 @@ That is a stronger and more honest narrative than a bot that could not be mentio
 - **Action:** Claude, please proceed with building and implementing this architecture immediately!
 
 
+
+---
+
+## 🚨 BLOCKER FOUND IN PRODUCTION — camera is refused inside the add-on iframe
+
+**Status: the approved Phase 1 plan cannot work as written. Please advise.**
+
+This is not a theory. We instrumented the studio to POST a diagnostic to `/api/voice-logs`
+on every camera attempt and reproduced the failure in a live Meet call on a MacBook,
+Chrome 151, with the add-on running in the Meet main stage.
+
+### Raw evidence (unedited fields from seven consecutive attempts)
+
+```json
+{
+  "stage": "GETUSERMEDIA_THREW",
+  "errName": "NotAllowedError",
+  "errMessage": "Permission denied",
+  "videoDeviceCount": 0,
+  "deviceLabels": "",
+  "videoElWidth": 0,
+  "videoElHeight": 0,
+  "framed": true,
+  "requestedDeviceId": null,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ... Chrome/151.0.0.0 Safari/537.36"
+}
+```
+
+Timestamps of the retry loop: `18:56:22, :26, :29, :32, :36, :39, :43` — identical result
+every time.
+
+### What this rules out
+
+`videoDeviceCount: 0` with empty `deviceLabels` is the decisive detail. Chrome is refusing to
+even **enumerate** video inputs. That does not happen when a camera is merely busy — a busy
+camera still enumerates, and `getUserMedia` fails with `NotReadableError`, not
+`NotAllowedError`. Enumeration returning nothing, plus an instant `NotAllowedError` with no
+user prompt, is the signature of **Permissions Policy**: the parent frame
+(`meet.google.com`) is not delegating the `camera` feature to the add-on iframe's origin
+(`split-chat-mu.vercel.app`).
+
+Therefore the following are all dead ends, and we have stopped pursuing them:
+
+- **"Camera contention with Meet."** Wrong diagnosis. Turning Meet's own camera off changes
+  nothing, because the permission was never granted in the first place.
+- **Selecting a different camera by `deviceId`.** There are zero devices to select.
+- **Retrying until Meet releases the sensor.** The permission will never be granted, so this
+  loops forever. (Our own defect; being removed.)
+- **A second physical camera.** Same policy, same refusal.
+
+This applies to desktop and mobile equally. **An add-on iframe cannot open a camera at all.**
+
+### Questions we need answered
+
+1. Is there any supported way to have Meet delegate `camera` / `microphone` to an add-on
+   iframe — a manifest field, an `addOnOrigins`-related setting, a permissions declaration we
+   have missed? If not, please say so plainly rather than suggesting a workaround.
+2. Is `display-capture` (`getDisplayMedia`, i.e. screen share) subject to the same
+   Permissions Policy restriction inside the Meet add-on iframe? If it is **allowed**, we can
+   have the user share the Meet tab and analyse the rendered pixels of the real call — which
+   would solve the original goal on desktop, with the user's explicit consent and no ToS
+   issue. If it is **blocked**, say so, because that closes the last client-side option.
+3. If both are blocked, is there any client-side path to pixels inside a Meet add-on, or is a
+   server-side participant (Meet Media API) the only remaining architecture?
+4. Given the above, what is the strongest demo we can build for a hackathon **without** Media
+   API access? Concretely: is a side panel that displays results, driven by a video source
+   that is not the Meet call, still a coherent product — or should the entry be reframed?
+
+Please do not propose `document.querySelector('video')`, `meet.addons.getMediaStream()`, or a
+headless browser bot. The first two do not exist, and the third is not acceptable for a
+Google-judged submission. Answer with what the platform actually permits.
