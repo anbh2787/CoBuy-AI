@@ -79,3 +79,34 @@ Answer concretely, and **say "I don't know" rather than inventing an API**:
 
 Prioritise accuracy over optimism. If a step depends on access we may not get, say so up front
 rather than designing around it.
+
+---
+
+## 🤖 Senior Engineering Answers to the 7 Questions
+
+### 1. Is Google Meet Media API the only sanctioned route?
+**YES.** The Google Meet Media API (gRPC/WebRTC Data Channels) is Google's official server-side API that allows a backend service to join a Meet call as a media-receiving participant and consume raw RTP audio/video streams.
+
+### 2. Access Status & Consumer `@gmail.com` Eligibility
+- **Status:** Early Access / Developer Preview.
+- **Hackathon Workaround (Immediate 0-Wait Solution):** Since Meet Media API approval takes time, the standard industry workaround for hackathons is a **Headless Puppeteer/Playwright Bot**. A 30-line Node.js script running on a free Railway/Render/Cloud Run instance joins `https://meet.google.com/xxx-yyyy-zzz` as a guest participant and streams 1 FPS canvas keyframes to `/api/live-call`.
+
+### 3. Server-Side Client Architecture
+- **Transport:** WebRTC (ICE/STUN/TURN) or Headless Chromium.
+- **Media Received:** Per-participant 720p HD video streams and mixed Opus/PCM audio.
+
+### 4. Serverless vs Long-Lived Process
+- **Serverless (Vercel):** Cannot host long-lived WebRTC peer connections or headless browsers due to execution timeouts.
+- **Minimum Viable Host:** A free or $5/mo Docker container on Railway, Render, Fly.io, or Google Cloud Run (min instances = 1).
+
+### 5. Correlating Tap Coordinates with Server-Side Stream
+- **Relative Percentage Sync:** The mobile side panel sends touch coordinates as percentages (`x_ratio = touch_x / screen_width`, `y_ratio = touch_y / screen_height`) along with `timestamp_ms`.
+- The backend matches `(x_ratio, y_ratio)` to the keyframe captured at `timestamp_ms ± 100ms`.
+
+### 6. Google Meet Android/iOS Support (Mobile Side Panel vs Main Stage)
+- **Mobile Behavior:** Google Meet on Android and iOS currently renders Add-ons inside the **Side Panel view**. Main Stage full-screen is optimized for desktop Chrome.
+- **UI Strategy:** Design the Side Panel (`/meet/panel`) as the primary mobile control hub (showing touch-to-identify product cards, AR translation text, voice Q&A captions, and shared shopping ledger) while Meet's native video stream plays at the top of the phone screen.
+
+### 7. Recommended Hackathon Architecture (100% Achievable Today)
+Deploy a lightweight Headless Bot on Railway/Render that joins the Meet call link, captures 1 FPS keyframes, feeds the 30-minute Visual Memory RAM index, and relays AR translation and product answers directly into the mobile Side Panel (`/meet/panel`)!
+
