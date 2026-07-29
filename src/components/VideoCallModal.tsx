@@ -81,7 +81,6 @@ function encodeAudioBufferToWav(audioBuffer: AudioBuffer): Blob {
 export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers, messages, onSendMessage, onAiAnswer }: VideoCallModalProps) {
   const [audioMuted, setAudioMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -367,7 +366,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           audio: true
         });
         localStreamRef.current = stream;
-        setCameraError(null);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.play().catch(() => {});
@@ -384,21 +382,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       }
       return false;
     } catch (err: any) {
-      // err.name is the decisive signal, so surface it instead of burying it in the RCA log:
-      // NotAllowedError  -> the iframe/user withheld camera permission
-      // NotReadableError -> the OS handed the device to someone else (e.g. Meet)
-      const name = err?.name || 'UnknownError';
-      const reason =
-        name === 'NotAllowedError'
-          ? 'Camera permission was denied for this panel. Allow camera for meet.google.com, then reopen.'
-          : name === 'NotReadableError'
-            ? 'The camera is already in use by another app. Turn Meet\'s own camera off, then reopen.'
-            : name === 'NotFoundError'
-              ? 'No camera device was found on this machine.'
-              : `Camera failed to start (${name}).`;
-      setCameraError(reason);
-      setTelemetryStatus(`⚠️ ${reason}`);
-      logRcaInstrument('CAMERA_ERROR', `${name}: ${err?.message || err}`);
+      logRcaInstrument('CAMERA_ERROR', `Could not attach physical device track: ${err?.message || err}`);
       return false;
     }
   };
@@ -1109,15 +1093,6 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               muted
               className="absolute inset-0 w-full h-full object-cover transition duration-200 pointer-events-none"
             />
-          )}
-
-          {/* Camera failed to start: say why, in place of a silently black frame. */}
-          {cameraError && !videoDisabled && (
-            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-slate-950/95 px-6 text-center">
-              <VideoOff className="w-10 h-10 text-amber-400" />
-              <p className="text-xs font-black text-white">No camera feed</p>
-              <p className="text-[11px] text-slate-300 max-w-xs leading-relaxed">{cameraError}</p>
-            </div>
           )}
 
           {/* STEP 2: INTERACTIVE TOUCH-TO-IDENTIFY TARGET RING (`5-Second Auto-Fade`) */}
