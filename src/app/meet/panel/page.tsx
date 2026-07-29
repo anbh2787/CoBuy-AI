@@ -54,8 +54,12 @@ export default function MeetSidePanel() {
         roomIdRef.current = roomIdFor(ctx.meetingId);
         setMeetingCode(ctx.meetingCode);
 
-        // Joiners land here with the activity already running.
-        setPhase(ctx.openReason === 'JOIN_ACTIVITY' ? 'live' : 'ready');
+        // Meet reloads the side panel once an activity begins, so both the initiator
+        // (START_ACTIVITY) and everyone who accepts the invite (JOIN_ACTIVITY) come
+        // back here with it already running — neither should see "Start shopping".
+        const activityRunning =
+          ctx.openReason === 'JOIN_ACTIVITY' || ctx.openReason === 'START_ACTIVITY';
+        setPhase(activityRunning ? 'live' : 'ready');
 
         ctx.sidePanel?.on('frameToFrameMessage', (message) => {
           try {
