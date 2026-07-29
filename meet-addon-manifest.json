@@ -1,0 +1,17 @@
+{
+  "addOns": {
+    "common": {
+      "name": "CoBuy AI",
+      "logoUrl": "https://split-chat-mu.vercel.app/icon.png"
+    },
+    "meet": {
+      "web": {
+        "sidePanelUri": "https://split-chat-mu.vercel.app/meet/panel",
+        "mainStageUri": "https://split-chat-mu.vercel.app/meet/stage",
+        "addOnOrigins": [
+          "https://split-chat-mu.vercel.app"
+        ]
+      }
+    }
+  }
+}

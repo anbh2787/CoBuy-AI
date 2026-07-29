@@ -14,6 +14,8 @@ interface VideoCallModalProps {
   roomMembers: User[];
   messages?: any[];
   onSendMessage?: (text: string) => void;
+  /** Fired whenever the AI answers, so hosts (e.g. the Meet side panel) can mirror it. */
+  onAiAnswer?: (payload: { userSaid?: string; aiAnswer: string }) => void;
 }
 
 interface ARTranslationItem {
@@ -76,7 +78,7 @@ function encodeAudioBufferToWav(audioBuffer: AudioBuffer): Blob {
   return new Blob([view], { type: 'audio/wav' });
 }
 
-export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers, messages, onSendMessage }: VideoCallModalProps) {
+export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, currentUser, roomMembers, messages, onSendMessage, onAiAnswer }: VideoCallModalProps) {
   const [audioMuted, setAudioMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -674,6 +676,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setIsAiProcessing(false);
         setIsAiSpeaking(true);
         setTelemetryStatus(`Target across ${remotePeerName}'s view confirmed: ${targetLabel}`);
+        onAiAnswer?.({ userSaid: data.userSaid, aiAnswer: reply });
 
         const resolvedTarget: TouchTargetState = { x: newTarget.x, y: newTarget.y, label: targetLabel, isLoading: false, authorName: currentUser?.name || 'You' };
         setRemoteTouchMap(prev => ({ ...prev, [remotePeerId]: resolvedTarget }));
@@ -849,6 +852,7 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         setIsAiSpeaking(true);
         setStudioAiAnswer(reply);
         if (data.userSaid) setStudioUserSaid(data.userSaid);
+        onAiAnswer?.({ userSaid: data.userSaid, aiAnswer: reply });
         setTelemetryStatus(touchedCoords ? `Target confirmed: ${targetLabel}` : `Observation complete.`);
 
         if (touchedCoords) {

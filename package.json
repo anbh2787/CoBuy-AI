@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.14.0",
+    "@googleworkspace/meet-addons": "^1.2.0",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-slot": "^1.0.2",
     "@supabase/supabase-js": "^2.43.4",

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { syncGoogleProfileToDatabase, updatePaymentHandles } from '@/lib/sync';
 import { User } from '@/lib/types';
@@ -13,6 +14,7 @@ export default function Navbar() {
   const [upi, setUpi] = useState('');
   const [venmo, setVenmo] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const checkSession = async () => {
@@ -73,6 +75,9 @@ export default function Navbar() {
       setShowPaymentModal(false);
     }, 1000);
   };
+
+  // Meet renders /meet routes inside its own iframe chrome — no app navbar there.
+  if (pathname?.startsWith('/meet')) return null;
 
   return (
     <>
