@@ -8,6 +8,7 @@ import {
   initMeetAddon,
   isFramed,
   panelUrl,
+  reportPermissionsProbe,
   roomIdFor,
   setLocalDisplayName,
   stageUrl,
@@ -53,6 +54,9 @@ export default function MeetSidePanel() {
         ctxRef.current = ctx;
         roomIdRef.current = roomIdFor(ctx.meetingId);
         setMeetingCode(ctx.meetingCode);
+
+        // The side panel is the mobile surface, so probe it separately from the main stage.
+        reportPermissionsProbe(ctx.frameType);
 
         // Meet reloads the side panel once an activity begins, so both the initiator
         // (START_ACTIVITY) and everyone who accepts the invite (JOIN_ACTIVITY) come

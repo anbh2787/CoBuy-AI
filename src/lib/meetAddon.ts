@@ -154,6 +154,91 @@ export async function initMeetAddon(): Promise<MeetContext> {
   };
 }
 
+/**
+ * Ask the browser directly which policy-controlled features this iframe actually has,
+ * and post the answer to the server log.
+ *
+ * This settles, with no user gesture and no guessing, whether Meet delegates `camera` and
+ * `display-capture` to the add-on's origin. `allowsFeature()` is the authoritative check —
+ * it reflects the parent's `allow` attribute, which is the thing we cannot see or set.
+ */
+export async function reportPermissionsProbe(frameType: string): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  const policy: any =
+    (document as any).permissionsPolicy || (document as any).featurePolicy || null;
+
+  const allows = (feature: string): string => {
+    try {
+      if (!policy?.allowsFeature) return 'no-policy-api';
+      return String(policy.allowsFeature(feature));
+    } catch {
+      return 'threw';
+    }
+  };
+
+  const queryPermission = async (name: string): Promise<string> => {
+    try {
+      const result = await navigator.permissions.query({ name: name as PermissionName });
+      return result.state;
+    } catch (error) {
+      return `threw:${(error as Error)?.name || 'unknown'}`;
+    }
+  };
+
+  let deviceCount = -1;
+  let labelledDevices = -1;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter(d => d.kind === 'videoinput');
+    deviceCount = videoInputs.length;
+    labelledDevices = videoInputs.filter(d => !!d.label).length;
+  } catch {
+    /* enumeration itself can be refused; -1 records that */
+  }
+
+  const payload = {
+    frameType,
+    origin: window.location.origin,
+    framed: window.self !== window.top,
+    policyApi: policy ? (('permissionsPolicy' in document) ? 'permissionsPolicy' : 'featurePolicy') : 'none',
+    allowsCamera: allows('camera'),
+    allowsMicrophone: allows('microphone'),
+    allowsDisplayCapture: allows('display-capture'),
+    // Feature existence is not permission, but a missing function rules it out entirely.
+    hasGetDisplayMedia: typeof navigator.mediaDevices?.getDisplayMedia === 'function',
+    hasGetUserMedia: typeof navigator.mediaDevices?.getUserMedia === 'function',
+    permissionCamera: await queryPermission('camera'),
+    permissionMicrophone: await queryPermission('microphone'),
+    videoInputCount: deviceCount,
+    videoInputsWithLabels: labelledDevices,
+    allowedFeatures: (() => {
+      try {
+        return policy?.allowedFeatures ? policy.allowedFeatures().join(',') : 'n/a';
+      } catch {
+        return 'threw';
+      }
+    })(),
+    ua: navigator.userAgent,
+  };
+
+  try {
+    await fetch('/api/voice-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: 'PERMISSIONS_PROBE',
+        userName: getLocalIdentity().name,
+        userSaid: `probe:${frameType}`,
+        aiAnswer: 'n/a',
+        details: JSON.stringify(payload),
+      }),
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
 /** Meet errors carry a machine-readable `errorType`; surface it when present. */
 export function describeMeetError(error: unknown): string {
   const errorType = (error as { errorType?: string } | null)?.errorType;

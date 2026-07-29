@@ -9,6 +9,7 @@ import {
   getLocalIdentity,
   initMeetAddon,
   isFramed,
+  reportPermissionsProbe,
   roomIdFor,
   type MeetContext,
 } from '@/lib/meetAddon';
@@ -60,6 +61,9 @@ export default function MeetMainStage() {
         const ctx = await initMeetAddon();
         if (cancelled) return;
         ctxRef.current = ctx;
+
+        // Record what this iframe is actually permitted to do, before anything asks for media.
+        reportPermissionsProbe(ctx.frameType);
 
         const room = await resolveRoomId(ctx);
         if (cancelled) return;
