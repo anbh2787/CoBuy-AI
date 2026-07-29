@@ -83,6 +83,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -356,18 +358,48 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     }
   };
 
-  const startLocalWebcam = async (mode: 'user' | 'environment'): Promise<boolean> => {
+  /** Push a freshly acquired track to peers already connected, so a camera switch is not local-only. */
+  const republishVideoTrack = (stream: MediaStream) => {
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    peerConnectionsRef.current.forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      sender?.replaceTrack(videoTrack).catch(() => {
+        /* peer is renegotiating or gone — the next offer carries the new track */
+      });
+    });
+  };
+
+  const startLocalWebcam = async (
+    mode: 'user' | 'environment',
+    deviceId?: string,
+  ): Promise<boolean> => {
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (localStreamRef.current) {
           localStreamRef.current.getTracks().forEach(t => t.stop());
         }
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+          // An explicit device beats facingMode: on a laptop it is how you pick the
+          // camera Meet is not already holding.
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true
         });
         localStreamRef.current = stream;
         setCameraError(null);
+        setSelectedDeviceId(stream.getVideoTracks()[0]?.getSettings().deviceId || deviceId || '');
+        republishVideoTrack(stream);
+
+        // Device labels are only populated once permission has been granted.
+        navigator.mediaDevices
+          .enumerateDevices()
+          .then(devices => setVideoDevices(devices.filter(d => d.kind === 'videoinput')))
+          .catch(() => {
+            /* enumeration is a convenience; the stream is already live */
+          });
+
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.play().catch(() => {});
@@ -581,6 +613,16 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
     const nextMode = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(nextMode);
     startLocalWebcam(nextMode);
+  };
+
+  /** Explicit device pick — the escape hatch when another app holds the default camera. */
+  const handleSelectCamera = (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    startLocalWebcam(facingMode, deviceId || undefined);
+  };
+
+  const handleRetryCamera = () => {
+    startLocalWebcam(facingMode, selectedDeviceId || undefined);
   };
 
   // STEP 2: LOCAL VIDEO TOUCH-TO-IDENTIFY
@@ -973,6 +1015,22 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Camera picker: on a laptop this is how you avoid the device Meet already holds. */}
+          {videoDevices.length > 1 && (
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => handleSelectCamera(e.target.value)}
+              className="hidden sm:block text-[11px] font-bold bg-slate-800 text-slate-200 border border-slate-700 rounded-xl px-2 py-1 max-w-[170px] focus:outline-none focus:border-teal-500"
+              title="Choose which camera CoBuy uses"
+            >
+              {videoDevices.map((device, index) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Camera ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* STEP 4: TRANSLUCENT FROSTED CHAT OVERLAY TOGGLE */}
           <button
             type="button"
@@ -1117,6 +1175,13 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
               <VideoOff className="w-10 h-10 text-amber-400" />
               <p className="text-xs font-black text-white">No camera feed</p>
               <p className="text-[11px] text-slate-300 max-w-xs leading-relaxed">{cameraError}</p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleRetryCamera(); }}
+                className="mt-1 text-[11px] font-black bg-white text-slate-950 rounded-lg px-3 py-1.5 active:scale-95 transition"
+              >
+                Try again
+              </button>
             </div>
           )}
 
