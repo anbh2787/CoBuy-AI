@@ -361,6 +361,49 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
   };
 
   /**
+   * Ship camera diagnostics to the server log so a failure can be read remotely instead of
+   * asked about. `track.muted` is the decisive field: on macOS a camera held by another app
+   * hands back a live track that never produces frames, and it arrives muted.
+   */
+  const reportCameraDiagnostic = (stage: string, extra: Record<string, unknown>) => {
+    try {
+      const track = localStreamRef.current?.getVideoTracks()[0];
+      const settings = track?.getSettings?.() || {};
+      const payload = {
+        stage,
+        trackReadyState: track?.readyState,
+        trackMuted: track?.muted,
+        trackEnabled: track?.enabled,
+        trackLabel: track?.label,
+        settingsWidth: (settings as MediaTrackSettings).width,
+        settingsHeight: (settings as MediaTrackSettings).height,
+        videoElWidth: localVideoRef.current?.videoWidth,
+        videoElHeight: localVideoRef.current?.videoHeight,
+        videoDeviceCount: videoDevices.length,
+        deviceLabels: videoDevices.map(d => d.label).join(' | '),
+        framed: typeof window !== 'undefined' && window.self !== window.top,
+        ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        ...extra,
+      };
+      fetch('/api/voice-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'CAMERA_DIAG',
+          userName: currentUser?.name || 'Unknown',
+          userSaid: stage,
+          aiAnswer: 'n/a',
+          details: JSON.stringify(payload),
+        }),
+      }).catch(() => {
+        /* diagnostics are best-effort */
+      });
+    } catch {
+      /* never let instrumentation break the studio */
+    }
+  };
+
+  /**
    * getUserMedia can succeed and still deliver nothing but black frames — that is what
    * happens when another app already owns the sensor. No error is thrown, so the only way
    * to catch it is to look at the pixels.
@@ -440,7 +483,9 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           blankProbeRef.current = setTimeout(() => {
             const video = localVideoRef.current;
             if (!video || !localStreamRef.current) return;
-            if (probeFrameIsBlank(video)) {
+            const blank = probeFrameIsBlank(video);
+            reportCameraDiagnostic(blank ? 'BLANK_AFTER_START' : 'LIVE_OK', { blank });
+            if (blank) {
               const multipleCameras = videoDevices.length > 1;
               const advice = multipleCameras
                 ? 'Pick a different camera above, or turn Meet\'s camera off.'
@@ -478,6 +523,11 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
       setCameraError(reason);
       setTelemetryStatus(`⚠️ ${reason}`);
       logRcaInstrument('CAMERA_ERROR', `${name}: ${err?.message || err}`);
+      reportCameraDiagnostic('GETUSERMEDIA_THREW', {
+        errName: name,
+        errMessage: err?.message || String(err),
+        requestedDeviceId: deviceId || null,
+      });
       return false;
     }
   };
