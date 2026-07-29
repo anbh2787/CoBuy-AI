@@ -158,7 +158,8 @@ export default function VideoCallModal({ isOpen, onClose, groupId, groupTitle, c
           if (frameData && frameData.length > 2000) {
             const now = Date.now();
             studioVisualMemoryRef.current.unshift({ id: `frame-${now}`, timestamp: now, base64Frame: frameData });
-            if (studioVisualMemoryRef.current.length > 180) studioVisualMemoryRef.current.pop();
+            // Maintain 1,800 keyframes (rolling 30-minute visual memory window)
+            if (studioVisualMemoryRef.current.length > 1800) studioVisualMemoryRef.current.pop();
           }
         } catch(e){}
       }, 1000);

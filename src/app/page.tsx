@@ -205,8 +205,8 @@ export default function Home() {
           if (frameData && frameData.length > 2000) {
             const now = Date.now();
             homeVisualMemoryRef.current.unshift({ id: `frame-${now}`, timestamp: now, base64Frame: frameData });
-            // Maintain 180 keyframes (rolling 3-minute memory window)
-            if (homeVisualMemoryRef.current.length > 180) {
+            // Maintain 1,800 keyframes (rolling 30-minute visual memory window)
+            if (homeVisualMemoryRef.current.length > 1800) {
               homeVisualMemoryRef.current.pop();
             }
           }
